@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WiseSub.Infrastructure.Data;
+using WiseSub.Infrastructure.Repositories;
 using WiseSub.Infrastructure.Security;
 
 namespace WiseSub.Infrastructure;
@@ -32,6 +33,14 @@ public static class DependencyInjection
 
         // Register encryption service for OAuth tokens
         services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
+
+        // Register repositories
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IEmailAccountRepository, EmailAccountRepository>();
+        services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<IAlertRepository, AlertRepository>();
+        services.AddScoped<IVendorMetadataRepository, VendorMetadataRepository>();
 
         return services;
     }
