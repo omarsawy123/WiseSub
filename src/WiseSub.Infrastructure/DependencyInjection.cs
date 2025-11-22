@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WiseSub.Application.Common.Interfaces;
 using WiseSub.Infrastructure.Data;
 using WiseSub.Infrastructure.Repositories;
 using WiseSub.Infrastructure.Security;
@@ -41,6 +42,10 @@ public static class DependencyInjection
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IVendorMetadataRepository, VendorMetadataRepository>();
+
+        // Register authentication services
+        services.AddHttpClient();
+        services.AddScoped<IAuthenticationService, WiseSub.Infrastructure.Authentication.GoogleAuthenticationService>();
 
         return services;
     }

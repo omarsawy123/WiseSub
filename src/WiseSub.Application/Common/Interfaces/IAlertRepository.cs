@@ -1,7 +1,7 @@
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
 
-namespace WiseSub.Infrastructure.Repositories;
+namespace WiseSub.Application.Common.Interfaces;
 
 /// <summary>
 /// Repository interface for Alert entity operations with scheduling queries
@@ -39,17 +39,12 @@ public interface IAlertRepository : IRepository<Alert>
     Task MarkAsSentAsync(string alertId, CancellationToken cancellationToken = default);
     
     /// <summary>
-    /// Marks an alert as failed and increments retry count
+    /// Marks an alert as failed
     /// </summary>
     Task MarkAsFailedAsync(string alertId, CancellationToken cancellationToken = default);
     
     /// <summary>
-    /// Checks if an alert already exists for a subscription and type
+    /// Gets alerts scheduled for today
     /// </summary>
-    Task<bool> ExistsAsync(string subscriptionId, AlertType type, DateTime scheduledFor, CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// Deletes old sent alerts (cleanup)
-    /// </summary>
-    Task DeleteOldSentAlertsAsync(DateTime olderThan, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Alert>> GetTodaysAlertsAsync(string userId, CancellationToken cancellationToken = default);
 }

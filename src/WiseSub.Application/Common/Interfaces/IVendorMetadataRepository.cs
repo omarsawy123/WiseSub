@@ -1,6 +1,6 @@
 using WiseSub.Domain.Entities;
 
-namespace WiseSub.Infrastructure.Repositories;
+namespace WiseSub.Application.Common.Interfaces;
 
 /// <summary>
 /// Repository interface for VendorMetadata entity operations with caching

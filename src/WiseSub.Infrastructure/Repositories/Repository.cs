@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using WiseSub.Application.Common.Interfaces;
 using WiseSub.Infrastructure.Data;
 
 namespace WiseSub.Infrastructure.Repositories;

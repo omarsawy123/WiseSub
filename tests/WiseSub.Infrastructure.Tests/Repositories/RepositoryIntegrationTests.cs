@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WiseSub.Application.Common.Interfaces;
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
 using WiseSub.Infrastructure.Data;

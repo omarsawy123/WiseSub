@@ -10,6 +10,7 @@ public static class DependencyInjection
     {
         // Register application services
         services.AddScoped<IHealthService, HealthService>();
+        services.AddScoped<IUserService, UserService>();
 
         return services;
     }

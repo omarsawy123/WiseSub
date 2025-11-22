@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace WiseSub.Infrastructure.Repositories;
+namespace WiseSub.Application.Common.Interfaces;
 
 /// <summary>
 /// Generic repository interface for data access operations

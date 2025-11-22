@@ -1,7 +1,7 @@
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
 
-namespace WiseSub.Infrastructure.Repositories;
+namespace WiseSub.Application.Common.Interfaces;
 
 /// <summary>
 /// Repository interface for Subscription entity operations with filtering and aggregation
@@ -39,27 +39,22 @@ public interface ISubscriptionRepository : IRepository<Subscription>
     Task<IEnumerable<Subscription>> GetWithVendorAsync(string userId, CancellationToken cancellationToken = default);
     
     /// <summary>
-    /// Gets subscriptions that require user review
-    /// </summary>
-    Task<IEnumerable<Subscription>> GetRequiringReviewAsync(string userId, CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// Gets total monthly spending for a user (normalized)
+    /// Gets the total monthly spending for a user (normalized to monthly)
     /// </summary>
     Task<decimal> GetTotalMonthlySpendingAsync(string userId, CancellationToken cancellationToken = default);
     
     /// <summary>
-    /// Gets spending breakdown by category
+    /// Gets spending breakdown by category for a user
     /// </summary>
     Task<Dictionary<string, decimal>> GetSpendingByCategoryAsync(string userId, CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// Finds duplicate subscriptions by service name and email account
-    /// </summary>
-    Task<Subscription?> FindDuplicateAsync(string serviceName, string emailAccountId, CancellationToken cancellationToken = default);
-    
-    /// <summary>
-    /// Archives subscriptions for a disconnected email account
-    /// </summary>
-    Task ArchiveByEmailAccountAsync(string emailAccountId, CancellationToken cancellationToken = default);
+}
+
+public class SubscriptionStats
+{
+    public int TotalCount { get; set; }
+    public int ActiveCount { get; set; }
+    public int CancelledCount { get; set; }
+    public int TrialCount { get; set; }
+    public decimal MonthlyTotal { get; set; }
+    public decimal YearlyTotal { get; set; }
 }

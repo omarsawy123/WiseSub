@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WiseSub.Application.Common.Interfaces;
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
 using WiseSub.Infrastructure.Data;
@@ -96,5 +97,10 @@ public class AlertRepository : Repository<Alert>, IAlertRepository
 
         _dbSet.RemoveRange(oldAlerts);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<IEnumerable<Alert>> GetTodaysAlertsAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
     }
 }
