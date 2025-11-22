@@ -2,7 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WiseSub.Application.Common.Interfaces;
+using WiseSub.Infrastructure.AI;
+using WiseSub.Infrastructure.Authentication;
 using WiseSub.Infrastructure.Data;
+using WiseSub.Infrastructure.Email;
 using WiseSub.Infrastructure.Repositories;
 using WiseSub.Infrastructure.Security;
 
@@ -42,10 +45,20 @@ public static class DependencyInjection
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IVendorMetadataRepository, VendorMetadataRepository>();
+        services.AddScoped<IEmailMetadataRepository, EmailMetadataRepository>();
 
         // Register authentication services
         services.AddHttpClient();
-        services.AddScoped<IAuthenticationService, WiseSub.Infrastructure.Authentication.GoogleAuthenticationService>();
+        services.AddScoped<IAuthenticationService, GoogleAuthenticationService>();
+
+        // Register email services
+        services.AddScoped<IGmailClient, GmailClient>();
+        services.AddScoped<IEmailIngestionService, EmailIngestionService>();
+        services.AddSingleton<IEmailQueueService, EmailQueueService>();
+
+        // Register AI services
+        services.AddSingleton<IOpenAIClient, OpenAIClient>();
+        services.AddScoped<IAIExtractionService, AIExtractionService>();
 
         return services;
     }
