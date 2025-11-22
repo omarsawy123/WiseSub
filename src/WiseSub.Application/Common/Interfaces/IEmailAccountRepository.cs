@@ -36,4 +36,9 @@ public interface IEmailAccountRepository : IRepository<EmailAccount>
     /// Revokes access by deleting tokens and marking as inactive
     /// </summary>
     Task RevokeAccessAsync(string accountId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Updates the Gmail History ID for incremental sync
+    /// </summary>
+    Task UpdateHistoryIdAsync(string accountId, string historyId, CancellationToken cancellationToken = default);
 }

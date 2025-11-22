@@ -68,4 +68,14 @@ public class EmailAccountRepository : Repository<EmailAccount>, IEmailAccountRep
             await UpdateAsync(account, cancellationToken);
         }
     }
+
+    public async Task UpdateHistoryIdAsync(string accountId, string historyId, CancellationToken cancellationToken = default)
+    {
+        var account = await GetByIdAsync(accountId, cancellationToken);
+        if (account != null)
+        {
+            account.GmailHistoryId = historyId;
+            await UpdateAsync(account, cancellationToken);
+        }
+    }
 }

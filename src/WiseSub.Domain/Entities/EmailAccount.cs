@@ -14,6 +14,7 @@ public class EmailAccount
     public DateTime LastScanAt { get; set; }
     public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
     public bool IsActive { get; set; } = true;
+    public string? GmailHistoryId { get; set; } // For incremental sync using Gmail History API
     
     // Navigation properties
     public User User { get; set; } = null!;
