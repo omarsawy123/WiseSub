@@ -69,7 +69,12 @@
   - **Property 56: Free tier defaults**
   - **Validates: Requirements 14.1**
 
-- [ ] 5. Implement Gmail API integration
+- [x] 5. Implement Gmail API integration
+
+
+
+
+
   - Create IGmailClient interface
   - Implement OAuth token storage and refresh logic
   - Implement email retrieval with IMAP fallback
@@ -82,7 +87,14 @@
   - **Property 3: Initial email retrieval span**
   - **Validates: Requirements 1.3**
 
-- [ ] 6. Implement email queueing service
+- [x] 6. Implement email queueing service
+
+
+
+
+
+
+
   - Create IEmailQueueService interface
   - Implement in-memory queue for MVP
   - Add priority-based queueing (new subscriptions > updates)
@@ -99,6 +111,11 @@
   - **Validates: Requirements 8.4**
 
 - [ ] 7. Implement AI extraction service with OpenAI
+
+
+
+
+
   - Create IOpenAIClient wrapper for OpenAI API
   - Implement email classification (subscription-related or not)
   - Create structured extraction prompt for service name, price, billing cycle, renewal date, category
