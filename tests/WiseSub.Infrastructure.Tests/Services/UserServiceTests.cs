@@ -1,10 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using WiseSub.Application.Services;
-using WiseSub.Domain.Entities;
+using WiseSub.Domain.Common;
 using WiseSub.Domain.Enums;
 using WiseSub.Infrastructure.Data;
 using WiseSub.Infrastructure.Repositories;
-using Xunit;
 
 namespace WiseSub.Infrastructure.Tests.Services;
 
@@ -20,13 +19,13 @@ public class UserServiceTests : IDisposable
             .Options;
 
         _context = new WiseSubDbContext(options);
-        
+
         // Create repository instances
         var userRepository = new UserRepository(_context);
         var emailAccountRepository = new EmailAccountRepository(_context);
         var subscriptionRepository = new SubscriptionRepository(_context);
         var alertRepository = new AlertRepository(_context);
-        
+
         _userService = new UserService(
             userRepository,
             emailAccountRepository,
@@ -44,9 +43,11 @@ public class UserServiceTests : IDisposable
         var subjectId = "google-123";
 
         // Act
-        var user = await _userService.CreateUserAsync(email, name, provider, subjectId);
+        var result = await _userService.CreateUserAsync(email, name, provider, subjectId);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        var user = result.Value;
         Assert.NotNull(user);
         Assert.Equal(email, user.Email);
         Assert.Equal(name, user.Name);
@@ -61,12 +62,15 @@ public class UserServiceTests : IDisposable
     public async Task GetUserByIdAsync_ShouldReturnUser_WhenUserExists()
     {
         // Arrange
-        var user = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var createResult = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var user = createResult.Value;
 
         // Act
-        var retrievedUser = await _userService.GetUserByIdAsync(user.Id);
+        var result = await _userService.GetUserByIdAsync(user.Id);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        var retrievedUser = result.Value;
         Assert.NotNull(retrievedUser);
         Assert.Equal(user.Id, retrievedUser.Id);
         Assert.Equal(user.Email, retrievedUser.Email);
@@ -76,10 +80,11 @@ public class UserServiceTests : IDisposable
     public async Task GetUserByIdAsync_ShouldReturnNull_WhenUserDoesNotExist()
     {
         // Act
-        var user = await _userService.GetUserByIdAsync("non-existent-id");
+        var result = await _userService.GetUserByIdAsync("non-existent-id");
 
         // Assert
-        Assert.Null(user);
+        Assert.True(result.IsFailure);
+        Assert.Equal($"{UserErrors.NotFound.Code}: {UserErrors.NotFound.Message}", result.ErrorMessage);
     }
 
     [Fact]
@@ -90,9 +95,11 @@ public class UserServiceTests : IDisposable
         await _userService.CreateUserAsync(email, "Test User", "Google", "google-123");
 
         // Act
-        var user = await _userService.GetUserByEmailAsync(email);
+        var result = await _userService.GetUserByEmailAsync(email);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        var user = result.Value;
         Assert.NotNull(user);
         Assert.Equal(email, user.Email);
     }
@@ -106,9 +113,11 @@ public class UserServiceTests : IDisposable
         await _userService.CreateUserAsync("test@example.com", "Test User", provider, subjectId);
 
         // Act
-        var user = await _userService.GetUserByOAuthSubjectIdAsync(provider, subjectId);
+        var result = await _userService.GetUserByOAuthSubjectIdAsync(provider, subjectId);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        var user = result.Value;
         Assert.NotNull(user);
         Assert.Equal(provider, user.OAuthProvider);
         Assert.Equal(subjectId, user.OAuthSubjectId);
@@ -118,15 +127,19 @@ public class UserServiceTests : IDisposable
     public async Task UpdateLastLoginAsync_ShouldUpdateLastLoginTime()
     {
         // Arrange
-        var user = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var createResult = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var user = createResult.Value;
         var originalLastLogin = user.LastLoginAt;
         await Task.Delay(100); // Small delay to ensure time difference
 
         // Act
-        await _userService.UpdateLastLoginAsync(user.Id);
+        var updateResult = await _userService.UpdateLastLoginAsync(user.Id);
 
         // Assert
-        var updatedUser = await _userService.GetUserByIdAsync(user.Id);
+        Assert.True(updateResult.IsSuccess);
+        var getUserResult = await _userService.GetUserByIdAsync(user.Id);
+        Assert.True(getUserResult.IsSuccess);
+        var updatedUser = getUserResult.Value;
         Assert.NotNull(updatedUser);
         Assert.NotNull(updatedUser.LastLoginAt);
         Assert.True(updatedUser.LastLoginAt > originalLastLogin);
@@ -136,29 +149,34 @@ public class UserServiceTests : IDisposable
     public async Task DeleteUserDataAsync_ShouldRemoveUser()
     {
         // Arrange
-        var user = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var createResult = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var user = createResult.Value;
 
         // Act
-        await _userService.DeleteUserDataAsync(user.Id);
+        var deleteResult = await _userService.DeleteUserDataAsync(user.Id);
 
         // Assert
-        var deletedUser = await _userService.GetUserByIdAsync(user.Id);
-        Assert.Null(deletedUser);
+        Assert.True(deleteResult.IsSuccess);
+        var getUserResult = await _userService.GetUserByIdAsync(user.Id);
+        Assert.True(getUserResult.IsFailure);
     }
 
     [Fact]
     public async Task ExportUserDataAsync_ShouldReturnJsonData()
     {
         // Arrange
-        var user = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var createResult = await _userService.CreateUserAsync("test@example.com", "Test User", "Google", "google-123");
+        var user = createResult.Value;
 
         // Act
-        var exportData = await _userService.ExportUserDataAsync(user.Id);
+        var result = await _userService.ExportUserDataAsync(user.Id);
 
         // Assert
+        Assert.True(result.IsSuccess);
+        var exportData = result.Value;
         Assert.NotNull(exportData);
         Assert.True(exportData.Length > 0);
-        
+
         var json = System.Text.Encoding.UTF8.GetString(exportData);
         Assert.Contains(user.Email, json);
         Assert.Contains(user.Name, json);

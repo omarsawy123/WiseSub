@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
 
@@ -36,17 +37,20 @@ public class EmailIngestionService : IEmailIngestionService
         _emailQueueService = emailQueueService;
     }
 
-    public async Task<int> ScanEmailAccountAsync(
+    public async Task<Result<int>> ScanEmailAccountAsync(
         EmailAccount emailAccount,
         DateTime? since = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Starting email scan for account {EmailAccountId}", emailAccount.Id);
 
+        if (emailAccount == null)
+            return Result.Failure<int>(EmailAccountErrors.NotFound);
+
         if (!emailAccount.IsActive)
         {
             _logger.LogWarning("Email account {EmailAccountId} is not active", emailAccount.Id);
-            return 0;
+            return Result.Failure<int>(EmailAccountErrors.ConnectionFailed);
         }
 
         // Default to 12 months ago if not specified
@@ -79,7 +83,7 @@ public class EmailIngestionService : IEmailIngestionService
         else
         {
             _logger.LogWarning("Email provider {Provider} not yet supported", emailAccount.Provider);
-            return 0;
+            return Result.Failure<int>(EmailAccountErrors.InvalidProvider);
         }
 
         var emailList = emails.ToList();
@@ -101,10 +105,10 @@ public class EmailIngestionService : IEmailIngestionService
         _logger.LogInformation("Queued {QueuedCount} out of {TotalCount} emails for processing",
             queuedCount, emailList.Count);
 
-        return emailList.Count;
+        return Result.Success(emailList.Count);
     }
 
-    public async Task<int> ScanUserEmailAccountsAsync(
+    public async Task<Result<int>> ScanUserEmailAccountsAsync(
         string userId,
         CancellationToken cancellationToken = default)
     {
@@ -117,7 +121,7 @@ public class EmailIngestionService : IEmailIngestionService
         if (!accountList.Any())
         {
             _logger.LogInformation("No active email accounts found for user {UserId}", userId);
-            return 0;
+            return Result.Success(0);
         }
 
         _logger.LogInformation("Found {Count} active email accounts for user {UserId}",
@@ -127,8 +131,16 @@ public class EmailIngestionService : IEmailIngestionService
         var totalEmails = 0;
         foreach (var account in accountList)
         {
-            var emailCount = await ScanEmailAccountAsync(account, null, cancellationToken);
-            totalEmails += emailCount;
+            var scanResult = await ScanEmailAccountAsync(account, null, cancellationToken);
+            if (scanResult.IsSuccess)
+            {
+                totalEmails += scanResult.Value;
+            }
+            else
+            {
+                _logger.LogWarning("Failed to scan account {AccountId}: {Error}", 
+                    account.Id, scanResult.ErrorMessage);
+            }
 
             // Small delay between accounts to avoid rate limiting
             if (accountList.Count > 1)
@@ -140,6 +152,6 @@ public class EmailIngestionService : IEmailIngestionService
         _logger.LogInformation("Completed email scan for user {UserId}. Total emails: {TotalEmails}",
             userId, totalEmails);
 
-        return totalEmails;
+        return Result.Success(totalEmails);
     }
 }

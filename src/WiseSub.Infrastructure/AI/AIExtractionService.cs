@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Common;
 using WiseSub.Domain.Enums;
 
 namespace WiseSub.Infrastructure.AI;
@@ -27,10 +28,13 @@ public class AIExtractionService : IAIExtractionService
         _logger = logger;
     }
 
-    public async Task<ClassificationResult> ClassifyEmailAsync(
+    public async Task<Result<ClassificationResult>> ClassifyEmailAsync(
         EmailMessage email,
         CancellationToken cancellationToken = default)
     {
+        if (email == null)
+            return Result.Failure<ClassificationResult>(EmailMetadataErrors.InvalidFormat);
+
         _logger.LogDebug("Classifying email from {Sender} with subject: {Subject}", 
             email.Sender, email.Subject);
 
@@ -46,12 +50,7 @@ public class AIExtractionService : IAIExtractionService
         if (response == null)
         {
             _logger.LogWarning("Received null response from OpenAI for classification");
-            return new ClassificationResult
-            {
-                IsSubscriptionRelated = false,
-                Confidence = 0.0,
-                Reason = "Failed to get response from AI"
-            };
+            return Result.Failure<ClassificationResult>(EmailMetadataErrors.ProcessingFailed);
         }
 
         var result = new ClassificationResult
@@ -66,13 +65,16 @@ public class AIExtractionService : IAIExtractionService
             "Email classified as {IsSubscriptionRelated} with confidence {Confidence:F2}",
             result.IsSubscriptionRelated, result.Confidence);
 
-        return result;
+        return Result.Success(result);
     }
 
-    public async Task<ExtractionResult> ExtractSubscriptionDataAsync(
+    public async Task<Result<ExtractionResult>> ExtractSubscriptionDataAsync(
         EmailMessage email,
         CancellationToken cancellationToken = default)
     {
+        if (email == null)
+            return Result.Failure<ExtractionResult>(EmailMetadataErrors.InvalidFormat);
+
         _logger.LogDebug("Extracting subscription data from email: {Subject}", email.Subject);
 
         var systemPrompt = GetExtractionSystemPrompt();
@@ -87,7 +89,7 @@ public class AIExtractionService : IAIExtractionService
         if (response == null)
         {
             _logger.LogWarning("Received null response from OpenAI for extraction");
-            return CreateFailedExtractionResult("Failed to get response from AI");
+            return Result.Failure<ExtractionResult>(EmailMetadataErrors.ProcessingFailed);
         }
 
         var result = MapExtractionResponse(response);
@@ -96,7 +98,7 @@ public class AIExtractionService : IAIExtractionService
             "Extracted subscription: {ServiceName}, Price: {Price} {Currency}, Confidence: {Confidence:F2}",
             result.ServiceName, result.Price, result.Currency, result.ConfidenceScore);
 
-        return result;
+        return Result.Success(result);
     }
 
     private string GetClassificationSystemPrompt()

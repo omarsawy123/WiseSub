@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
 
 namespace WiseSub.Infrastructure.Email;
@@ -31,12 +32,15 @@ public class EmailQueueService : IEmailQueueService
         _emailMetadataRepository = emailMetadataRepository;
     }
 
-    public async Task<string> QueueEmailForProcessingAsync(
+    public async Task<Result<string>> QueueEmailForProcessingAsync(
         string emailAccountId,
         EmailMessage email,
         EmailProcessingPriority priority = EmailProcessingPriority.Normal,
         CancellationToken cancellationToken = default)
     {
+        if (email == null)
+            return Result.Failure<string>(EmailMetadataErrors.InvalidFormat);
+
         // Check if email already exists in metadata (avoid duplicates)
         var existingMetadata = await _emailMetadataRepository.GetByExternalEmailIdAsync(
             email.Id, cancellationToken);
@@ -46,7 +50,7 @@ public class EmailQueueService : IEmailQueueService
             _logger.LogDebug(
                 "Email {EmailId} already exists in metadata, skipping queue",
                 email.Id);
-            return existingMetadata.Id;
+            return Result.Success(existingMetadata.Id);
         }
 
         // Create email metadata record
@@ -85,7 +89,7 @@ public class EmailQueueService : IEmailQueueService
             "Queued email {EmailId} with priority {Priority} for processing. Metadata ID: {MetadataId}",
             email.Id, priority, emailMetadata.Id);
 
-        return emailMetadata.Id;
+        return Result.Success(emailMetadata.Id);
     }
 
     public async Task<QueueStatus> GetQueueStatusAsync(CancellationToken cancellationToken = default)
@@ -135,7 +139,7 @@ public class EmailQueueService : IEmailQueueService
         return Task.FromResult(queuedEmail);
     }
 
-    public async Task MarkAsProcessedAsync(
+    public async Task<Result> MarkAsProcessedAsync(
         string emailMetadataId,
         string? subscriptionId = null,
         CancellationToken cancellationToken = default)
@@ -148,7 +152,15 @@ public class EmailQueueService : IEmailQueueService
             _logger.LogWarning(
                 "Email metadata {EmailMetadataId} not found when marking as processed",
                 emailMetadataId);
-            return;
+            return Result.Failure(EmailMetadataErrors.NotFound);
+        }
+
+        if (emailMetadata.IsProcessed)
+        {
+            _logger.LogWarning(
+                "Email metadata {EmailMetadataId} is already processed",
+                emailMetadataId);
+            return Result.Failure(EmailMetadataErrors.AlreadyProcessed);
         }
 
         emailMetadata.IsProcessed = true;
@@ -160,6 +172,8 @@ public class EmailQueueService : IEmailQueueService
         _logger.LogInformation(
             "Marked email {EmailMetadataId} as processed. Subscription ID: {SubscriptionId}",
             emailMetadataId, subscriptionId ?? "None");
+        
+        return Result.Success();
     }
 
     public async Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default)

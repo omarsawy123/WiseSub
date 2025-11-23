@@ -20,7 +20,7 @@ public class HealthController : ControllerBase
         var result = await _healthService.CheckHealthAsync();
 
         if (result.IsFailure)
-            return StatusCode(500, new { error = result.Error });
+            return StatusCode(500, new { error = result.ErrorMessage });
 
         return Ok(result.Value);
     }
@@ -31,7 +31,7 @@ public class HealthController : ControllerBase
         var result = await _healthService.CheckDatabaseHealthAsync();
 
         if (result.IsFailure)
-            return StatusCode(500, new { error = result.Error });
+            return StatusCode(500, new { error = result.ErrorMessage });
 
         return Ok(result.Value);
     }

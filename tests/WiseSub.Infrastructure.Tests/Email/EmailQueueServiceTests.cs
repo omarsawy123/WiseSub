@@ -46,14 +46,15 @@ public class EmailQueueServiceTests
             .ReturnsAsync((EmailMetadata em, CancellationToken ct) => em);
 
         // Act
-        var metadataId = await _emailQueueService.QueueEmailForProcessingAsync(
+        var result = await _emailQueueService.QueueEmailForProcessingAsync(
             emailAccountId,
             email,
             EmailProcessingPriority.High);
 
         // Assert
-        Assert.NotNull(metadataId);
-        Assert.NotEmpty(metadataId);
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.NotEmpty(result.Value);
 
         _emailMetadataRepositoryMock.Verify(
             x => x.AddAsync(It.Is<EmailMetadata>(em =>
@@ -96,13 +97,14 @@ public class EmailQueueServiceTests
             .ReturnsAsync(existingMetadata);
 
         // Act
-        var metadataId = await _emailQueueService.QueueEmailForProcessingAsync(
+        var result = await _emailQueueService.QueueEmailForProcessingAsync(
             emailAccountId,
             email,
             EmailProcessingPriority.High);
 
         // Assert
-        Assert.Equal(existingMetadata.Id, metadataId);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(existingMetadata.Id, result.Value);
 
         _emailMetadataRepositoryMock.Verify(
             x => x.AddAsync(It.IsAny<EmailMetadata>(), It.IsAny<CancellationToken>()),

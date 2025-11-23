@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WiseSub.Application.Common.Interfaces;
+using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
 
@@ -24,8 +25,15 @@ public class UserService : IUserService
         _alertRepository = alertRepository;
     }
 
-    public async Task<User> CreateUserAsync(string email, string name, string oauthProvider, string oauthSubjectId)
+    public async Task<Result<User>> CreateUserAsync(string email, string name, string oauthProvider, string oauthSubjectId)
     {
+        if (string.IsNullOrWhiteSpace(email))
+            return Result.Failure<User>(UserErrors.InvalidEmail);
+
+        var existingUser = await _userRepository.GetByEmailAsync(email);
+        if (existingUser != null)
+            return Result.Failure<User>(UserErrors.AlreadyExists);
+
         var user = new User
         {
             Id = Guid.NewGuid().ToString(),
@@ -48,47 +56,69 @@ public class UserService : IUserService
             })
         };
 
-        return await _userRepository.AddAsync(user);
+        var createdUser = await _userRepository.AddAsync(user);
+        return Result.Success(createdUser);
     }
 
-    public async Task<User?> GetUserByIdAsync(string userId)
-    {
-        return await _userRepository.GetByIdAsync(userId);
-    }
-
-    public async Task<User?> GetUserByEmailAsync(string email)
-    {
-        return await _userRepository.GetByEmailAsync(email);
-    }
-
-    public async Task<User?> GetUserByOAuthSubjectIdAsync(string oauthProvider, string oauthSubjectId)
-    {
-        return await _userRepository.GetByOAuthAsync(oauthProvider, oauthSubjectId);
-    }
-
-    public async Task<User> UpdateUserAsync(User user)
-    {
-        await _userRepository.UpdateAsync(user);
-        return user;
-    }
-
-    public async Task UpdateLastLoginAsync(string userId)
-    {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user != null)
-        {
-            user.LastLoginAt = DateTime.UtcNow;
-            await _userRepository.UpdateAsync(user);
-        }
-    }
-
-    public async Task<byte[]> ExportUserDataAsync(string userId)
+    public async Task<Result<User>> GetUserByIdAsync(string userId)
     {
         var user = await _userRepository.GetByIdAsync(userId);
         if (user == null)
-        {
-            throw new InvalidOperationException($"User with ID {userId} not found");
-        }
+            return Result.Failure<User>(UserErrors.NotFound);
+
+        return Result.Success(user);
+    }
+
+    public async Task<Result<User>> GetUserByEmailAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return Result.Failure<User>(UserErrors.InvalidEmail);
+
+        var user = await _userRepository.GetByEmailAsync(email);
+        if (user == null)
+            return Result.Failure<User>(UserErrors.NotFound);
+
+        return Result.Success(user);
+    }
+
+    public async Task<Result<User>> GetUserByOAuthSubjectIdAsync(string oauthProvider, string oauthSubjectId)
+    {
+        var user = await _userRepository.GetByOAuthAsync(oauthProvider, oauthSubjectId);
+        if (user == null)
+            return Result.Failure<User>(UserErrors.NotFound);
+
+        return Result.Success(user);
+    }
+
+    public async Task<Result<User>> UpdateUserAsync(User user)
+    {
+        if (user == null)
+            return Result.Failure<User>(UserErrors.NotFound);
+
+        var existingUser = await _userRepository.GetByIdAsync(user.Id);
+        if (existingUser == null)
+            return Result.Failure<User>(UserErrors.NotFound);
+
+        await _userRepository.UpdateAsync(user);
+        return Result.Success(user);
+    }
+
+    public async Task<Result> UpdateLastLoginAsync(string userId)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null)
+            return Result.Failure(UserErrors.NotFound);
+
+        user.LastLoginAt = DateTime.UtcNow;
+        await _userRepository.UpdateAsync(user);
+        return Result.Success();
+    }
+
+    public async Task<Result<byte[]>> ExportUserDataAsync(string userId)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null)
+            return Result.Failure<byte[]>(UserErrors.NotFound);
 
         // Load all related data
         var emailAccounts = await _emailAccountRepository.GetByUserIdAsync(userId);
@@ -147,12 +177,17 @@ public class UserService : IUserService
             WriteIndented = true
         });
 
-        return System.Text.Encoding.UTF8.GetBytes(json);
+        return Result.Success(System.Text.Encoding.UTF8.GetBytes(json));
     }
 
-    public async Task DeleteUserDataAsync(string userId)
+    public async Task<Result> DeleteUserDataAsync(string userId)
     {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null)
+            return Result.Failure(UserErrors.NotFound);
+
         // Use the repository's cascading delete method
         await _userRepository.DeleteUserDataAsync(userId);
+        return Result.Success();
     }
 }

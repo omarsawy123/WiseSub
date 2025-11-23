@@ -1,4 +1,5 @@
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Common;
 
 namespace WiseSub.Application.Common.Interfaces;
 
@@ -15,7 +16,7 @@ public interface IEmailQueueService
     /// <param name="priority">Processing priority</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The queued email metadata ID</returns>
-    Task<string> QueueEmailForProcessingAsync(
+    Task<Result<string>> QueueEmailForProcessingAsync(
         string emailAccountId,
         EmailMessage email,
         EmailProcessingPriority priority = EmailProcessingPriority.Normal,
@@ -41,7 +42,7 @@ public interface IEmailQueueService
     /// <param name="emailMetadataId">The email metadata ID</param>
     /// <param name="subscriptionId">The subscription ID if one was created</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task MarkAsProcessedAsync(
+    Task<Result> MarkAsProcessedAsync(
         string emailMetadataId,
         string? subscriptionId = null,
         CancellationToken cancellationToken = default);

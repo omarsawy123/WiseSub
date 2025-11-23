@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Common;
 
 namespace WiseSub.Infrastructure.Authentication;
 
@@ -34,7 +35,7 @@ public class GoogleAuthenticationService : IAuthenticationService
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = "Failed to exchange authorization code for token"
+                ErrorMessage = AuthenticationErrors.InvalidCredentials.Message
             };
         }
 
@@ -45,32 +46,42 @@ public class GoogleAuthenticationService : IAuthenticationService
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = "Failed to retrieve user information from Google"
+                ErrorMessage = AuthenticationErrors.InvalidCredentials.Message
             };
         }
 
         // Check if user exists
-        var existingUser = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
+        var existingUserResult = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
         
         bool isNewUser = false;
         string userId;
         
-        if (existingUser == null)
+        if (existingUserResult.IsFailure)
         {
             // Create new user
-            var newUser = await _userService.CreateUserAsync(
+            var createUserResult = await _userService.CreateUserAsync(
                 userInfo.Email,
                 userInfo.Name,
                 "Google",
                 userInfo.Sub
             );
-            userId = newUser.Id;
+            
+            if (createUserResult.IsFailure)
+            {
+                return new AuthenticationResult
+                {
+                    Success = false,
+                    ErrorMessage = createUserResult.ErrorMessage
+                };
+            }
+            
+            userId = createUserResult.Value.Id;
             isNewUser = true;
         }
         else
         {
             // Update last login
-            userId = existingUser.Id;
+            userId = existingUserResult.Value.Id;
             await _userService.UpdateLastLoginAsync(userId);
         }
 
@@ -111,7 +122,7 @@ public class GoogleAuthenticationService : IAuthenticationService
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = "Failed to refresh token"
+                ErrorMessage = AuthenticationErrors.InvalidToken.Message
             };
         }
 
@@ -121,7 +132,7 @@ public class GoogleAuthenticationService : IAuthenticationService
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = "Invalid token response"
+                ErrorMessage = AuthenticationErrors.InvalidToken.Message
             };
         }
 
@@ -132,27 +143,27 @@ public class GoogleAuthenticationService : IAuthenticationService
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = "Failed to retrieve user information"
+                ErrorMessage = AuthenticationErrors.InvalidCredentials.Message
             };
         }
 
-        var user = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
-        if (user == null)
+        var userResult = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
+        if (userResult.IsFailure)
         {
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = "User not found"
+                ErrorMessage = UserErrors.NotFound.Message
             };
         }
 
-        var jwtToken = GenerateJwtToken(user.Id, user.Email);
+        var jwtToken = GenerateJwtToken(userResult.Value.Id, userResult.Value.Email);
 
         return new AuthenticationResult
         {
             Success = true,
-            UserId = user.Id,
-            Email = user.Email,
+            UserId = userResult.Value.Id,
+            Email = userResult.Value.Email,
             JwtToken = jwtToken,
             RefreshToken = refreshToken
         };

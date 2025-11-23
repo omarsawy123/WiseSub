@@ -93,12 +93,13 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        var user = await _userService.GetUserByIdAsync(userId);
-        if (user == null)
+        var userResult = await _userService.GetUserByIdAsync(userId);
+        if (userResult.IsFailure)
         {
-            return NotFound(new { error = "User not found" });
+            return NotFound(new { error = userResult.ErrorMessage });
         }
 
+        var user = userResult.Value;
         return Ok(new
         {
             id = user.Id,

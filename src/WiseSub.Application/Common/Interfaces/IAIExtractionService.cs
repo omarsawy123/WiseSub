@@ -1,4 +1,5 @@
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Common;
 
 namespace WiseSub.Application.Common.Interfaces;
 
@@ -13,7 +14,7 @@ public interface IAIExtractionService
     /// <param name="email">The email message to classify</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Classification result with confidence score</returns>
-    Task<ClassificationResult> ClassifyEmailAsync(
+    Task<Result<ClassificationResult>> ClassifyEmailAsync(
         EmailMessage email,
         CancellationToken cancellationToken = default);
 
@@ -23,7 +24,7 @@ public interface IAIExtractionService
     /// <param name="email">The email message to extract from</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Extraction result with subscription data and confidence scores</returns>
-    Task<ExtractionResult> ExtractSubscriptionDataAsync(
+    Task<Result<ExtractionResult>> ExtractSubscriptionDataAsync(
         EmailMessage email,
         CancellationToken cancellationToken = default);
 }
