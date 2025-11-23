@@ -27,181 +27,150 @@ public class GoogleAuthenticationService : IAuthenticationService
 
     public async Task<AuthenticationResult> AuthenticateWithGoogleAsync(string authorizationCode)
     {
-        try
-        {
-            // Exchange authorization code for access token
-            var tokenResponse = await ExchangeCodeForTokenAsync(authorizationCode);
-            if (tokenResponse == null)
-            {
-                return new AuthenticationResult
-                {
-                    Success = false,
-                    ErrorMessage = "Failed to exchange authorization code for token"
-                };
-            }
-
-            // Get user info from Google
-            var userInfo = await GetGoogleUserInfoAsync(tokenResponse.AccessToken);
-            if (userInfo == null)
-            {
-                return new AuthenticationResult
-                {
-                    Success = false,
-                    ErrorMessage = "Failed to retrieve user information from Google"
-                };
-            }
-
-            // Check if user exists
-            var existingUser = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
-            
-            bool isNewUser = false;
-            string userId;
-            
-            if (existingUser == null)
-            {
-                // Create new user
-                var newUser = await _userService.CreateUserAsync(
-                    userInfo.Email,
-                    userInfo.Name,
-                    "Google",
-                    userInfo.Sub
-                );
-                userId = newUser.Id;
-                isNewUser = true;
-            }
-            else
-            {
-                // Update last login
-                userId = existingUser.Id;
-                await _userService.UpdateLastLoginAsync(userId);
-            }
-
-            // Generate JWT token
-            var jwtToken = GenerateJwtToken(userId, userInfo.Email);
-
-            return new AuthenticationResult
-            {
-                Success = true,
-                UserId = userId,
-                Email = userInfo.Email,
-                JwtToken = jwtToken,
-                RefreshToken = tokenResponse.RefreshToken,
-                IsNewUser = isNewUser
-            };
-        }
-        catch (Exception ex)
+        // Exchange authorization code for access token
+        var tokenResponse = await ExchangeCodeForTokenAsync(authorizationCode);
+        if (tokenResponse == null)
         {
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = $"Authentication failed: {ex.Message}"
+                ErrorMessage = "Failed to exchange authorization code for token"
             };
         }
+
+        // Get user info from Google
+        var userInfo = await GetGoogleUserInfoAsync(tokenResponse.AccessToken);
+        if (userInfo == null)
+        {
+            return new AuthenticationResult
+            {
+                Success = false,
+                ErrorMessage = "Failed to retrieve user information from Google"
+            };
+        }
+
+        // Check if user exists
+        var existingUser = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
+        
+        bool isNewUser = false;
+        string userId;
+        
+        if (existingUser == null)
+        {
+            // Create new user
+            var newUser = await _userService.CreateUserAsync(
+                userInfo.Email,
+                userInfo.Name,
+                "Google",
+                userInfo.Sub
+            );
+            userId = newUser.Id;
+            isNewUser = true;
+        }
+        else
+        {
+            // Update last login
+            userId = existingUser.Id;
+            await _userService.UpdateLastLoginAsync(userId);
+        }
+
+        // Generate JWT token
+        var jwtToken = GenerateJwtToken(userId, userInfo.Email);
+
+        return new AuthenticationResult
+        {
+            Success = true,
+            UserId = userId,
+            Email = userInfo.Email,
+            JwtToken = jwtToken,
+            RefreshToken = tokenResponse.RefreshToken,
+            IsNewUser = isNewUser
+        };
     }
 
     public async Task<AuthenticationResult> RefreshTokenAsync(string refreshToken)
     {
-        try
+        var clientId = _configuration["Authentication:Google:ClientId"];
+        var clientSecret = _configuration["Authentication:Google:ClientSecret"];
+
+        var requestData = new Dictionary<string, string>
         {
-            var clientId = _configuration["Authentication:Google:ClientId"];
-            var clientSecret = _configuration["Authentication:Google:ClientSecret"];
+            { "client_id", clientId ?? "" },
+            { "client_secret", clientSecret ?? "" },
+            { "refresh_token", refreshToken },
+            { "grant_type", "refresh_token" }
+        };
 
-            var requestData = new Dictionary<string, string>
-            {
-                { "client_id", clientId ?? "" },
-                { "client_secret", clientSecret ?? "" },
-                { "refresh_token", refreshToken },
-                { "grant_type", "refresh_token" }
-            };
+        var response = await _httpClient.PostAsync(
+            "https://oauth2.googleapis.com/token",
+            new FormUrlEncodedContent(requestData)
+        );
 
-            var response = await _httpClient.PostAsync(
-                "https://oauth2.googleapis.com/token",
-                new FormUrlEncodedContent(requestData)
-            );
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return new AuthenticationResult
-                {
-                    Success = false,
-                    ErrorMessage = "Failed to refresh token"
-                };
-            }
-
-            var tokenResponse = await response.Content.ReadFromJsonAsync<GoogleTokenResponse>();
-            if (tokenResponse == null)
-            {
-                return new AuthenticationResult
-                {
-                    Success = false,
-                    ErrorMessage = "Invalid token response"
-                };
-            }
-
-            // Get user info
-            var userInfo = await GetGoogleUserInfoAsync(tokenResponse.AccessToken);
-            if (userInfo == null)
-            {
-                return new AuthenticationResult
-                {
-                    Success = false,
-                    ErrorMessage = "Failed to retrieve user information"
-                };
-            }
-
-            var user = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
-            if (user == null)
-            {
-                return new AuthenticationResult
-                {
-                    Success = false,
-                    ErrorMessage = "User not found"
-                };
-            }
-
-            var jwtToken = GenerateJwtToken(user.Id, user.Email);
-
-            return new AuthenticationResult
-            {
-                Success = true,
-                UserId = user.Id,
-                Email = user.Email,
-                JwtToken = jwtToken,
-                RefreshToken = refreshToken
-            };
-        }
-        catch (Exception ex)
+        if (!response.IsSuccessStatusCode)
         {
             return new AuthenticationResult
             {
                 Success = false,
-                ErrorMessage = $"Token refresh failed: {ex.Message}"
+                ErrorMessage = "Failed to refresh token"
             };
         }
+
+        var tokenResponse = await response.Content.ReadFromJsonAsync<GoogleTokenResponse>();
+        if (tokenResponse == null)
+        {
+            return new AuthenticationResult
+            {
+                Success = false,
+                ErrorMessage = "Invalid token response"
+            };
+        }
+
+        // Get user info
+        var userInfo = await GetGoogleUserInfoAsync(tokenResponse.AccessToken);
+        if (userInfo == null)
+        {
+            return new AuthenticationResult
+            {
+                Success = false,
+                ErrorMessage = "Failed to retrieve user information"
+            };
+        }
+
+        var user = await _userService.GetUserByOAuthSubjectIdAsync("Google", userInfo.Sub);
+        if (user == null)
+        {
+            return new AuthenticationResult
+            {
+                Success = false,
+                ErrorMessage = "User not found"
+            };
+        }
+
+        var jwtToken = GenerateJwtToken(user.Id, user.Email);
+
+        return new AuthenticationResult
+        {
+            Success = true,
+            UserId = user.Id,
+            Email = user.Email,
+            JwtToken = jwtToken,
+            RefreshToken = refreshToken
+        };
     }
 
     public async Task<bool> RevokeTokenAsync(string refreshToken)
     {
-        try
+        var requestData = new Dictionary<string, string>
         {
-            var requestData = new Dictionary<string, string>
-            {
-                { "token", refreshToken }
-            };
+            { "token", refreshToken }
+        };
 
-            var response = await _httpClient.PostAsync(
-                "https://oauth2.googleapis.com/revoke",
-                new FormUrlEncodedContent(requestData)
-            );
+        var response = await _httpClient.PostAsync(
+            "https://oauth2.googleapis.com/revoke",
+            new FormUrlEncodedContent(requestData)
+        );
 
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            // If revocation fails, we still consider logout successful
-            // since the token will expire anyway
-            return false;
-        }
+        return response.IsSuccessStatusCode;
     }
 
     public string GenerateJwtToken(string userId, string email)

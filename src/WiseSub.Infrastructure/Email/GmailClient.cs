@@ -49,93 +49,81 @@ public class GmailClient : IGmailClient
         string authorizationCode,
         CancellationToken cancellationToken = default)
     {
-        try
+        _logger.LogInformation("Connecting Gmail account for user {UserId}", userId);
+
+        // Exchange authorization code for tokens
+        var tokenResponse = await ExchangeCodeForTokensAsync(authorizationCode, cancellationToken);
+        if (tokenResponse == null)
         {
-            _logger.LogInformation("Connecting Gmail account for user {UserId}", userId);
-
-            // Exchange authorization code for tokens
-            var tokenResponse = await ExchangeCodeForTokensAsync(authorizationCode, cancellationToken);
-            if (tokenResponse == null)
+            return new EmailConnectionResult
             {
-                return new EmailConnectionResult
-                {
-                    Success = false,
-                    ErrorMessage = "Failed to exchange authorization code for tokens"
-                };
-            }
-
-            // Get user's email address
-            var emailAddress = await GetUserEmailAddressAsync(tokenResponse.AccessToken, cancellationToken);
-            if (string.IsNullOrEmpty(emailAddress))
-            {
-                return new EmailConnectionResult
-                {
-                    Success = false,
-                    ErrorMessage = "Failed to retrieve email address from Gmail"
-                };
-            }
-
-            // Check if account already exists
-            var existingAccount = await _emailAccountRepository.GetByEmailAddressAsync(emailAddress, cancellationToken);
-            if (existingAccount != null)
-            {
-                // Update existing account
-                var encryptedAccessToken = _tokenEncryptionService.Encrypt(tokenResponse.AccessToken);
-                var encryptedRefreshToken = _tokenEncryptionService.Encrypt(tokenResponse.RefreshToken ?? "");
-                var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
-
-                await _emailAccountRepository.UpdateTokensAsync(
-                    existingAccount.Id,
-                    encryptedAccessToken,
-                    encryptedRefreshToken,
-                    expiresAt,
-                    cancellationToken);
-
-                return new EmailConnectionResult
-                {
-                    Success = true,
-                    EmailAccountId = existingAccount.Id,
-                    EmailAddress = emailAddress,
-                    TokenExpiresAt = expiresAt
-                };
-            }
-
-            // Create new email account
-            var emailAccount = new EmailAccount
-            {
-                UserId = userId,
-                EmailAddress = emailAddress,
-                Provider = EmailProvider.Gmail,
-                EncryptedAccessToken = _tokenEncryptionService.Encrypt(tokenResponse.AccessToken),
-                EncryptedRefreshToken = _tokenEncryptionService.Encrypt(tokenResponse.RefreshToken ?? ""),
-                TokenExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
-                ConnectedAt = DateTime.UtcNow,
-                LastScanAt = DateTime.MinValue,
-                IsActive = true
+                Success = false,
+                ErrorMessage = "Failed to exchange authorization code for tokens"
             };
+        }
 
-            await _emailAccountRepository.AddAsync(emailAccount, cancellationToken);
+        // Get user's email address
+        var emailAddress = await GetUserEmailAddressAsync(tokenResponse.AccessToken, cancellationToken);
+        if (string.IsNullOrEmpty(emailAddress))
+        {
+            return new EmailConnectionResult
+            {
+                Success = false,
+                ErrorMessage = "Failed to retrieve email address from Gmail"
+            };
+        }
 
-            _logger.LogInformation("Successfully connected Gmail account {EmailAddress} for user {UserId}",
-                emailAddress, userId);
+        // Check if account already exists
+        var existingAccount = await _emailAccountRepository.GetByEmailAddressAsync(emailAddress, cancellationToken);
+        if (existingAccount != null)
+        {
+            // Update existing account
+            var encryptedAccessToken = _tokenEncryptionService.Encrypt(tokenResponse.AccessToken);
+            var encryptedRefreshToken = _tokenEncryptionService.Encrypt(tokenResponse.RefreshToken ?? "");
+            var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+
+            await _emailAccountRepository.UpdateTokensAsync(
+                existingAccount.Id,
+                encryptedAccessToken,
+                encryptedRefreshToken,
+                expiresAt,
+                cancellationToken);
 
             return new EmailConnectionResult
             {
                 Success = true,
-                EmailAccountId = emailAccount.Id,
+                EmailAccountId = existingAccount.Id,
                 EmailAddress = emailAddress,
-                TokenExpiresAt = emailAccount.TokenExpiresAt
+                TokenExpiresAt = expiresAt
             };
         }
-        catch (Exception ex)
+
+        // Create new email account
+        var emailAccount = new EmailAccount
         {
-            _logger.LogError(ex, "Error connecting Gmail account for user {UserId}", userId);
-            return new EmailConnectionResult
-            {
-                Success = false,
-                ErrorMessage = $"Failed to connect Gmail account: {ex.Message}"
-            };
-        }
+            UserId = userId,
+            EmailAddress = emailAddress,
+            Provider = EmailProvider.Gmail,
+            EncryptedAccessToken = _tokenEncryptionService.Encrypt(tokenResponse.AccessToken),
+            EncryptedRefreshToken = _tokenEncryptionService.Encrypt(tokenResponse.RefreshToken ?? ""),
+            TokenExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
+            ConnectedAt = DateTime.UtcNow,
+            LastScanAt = DateTime.MinValue,
+            IsActive = true
+        };
+
+        await _emailAccountRepository.AddAsync(emailAccount, cancellationToken);
+
+        _logger.LogInformation("Successfully connected Gmail account {EmailAddress} for user {UserId}",
+            emailAddress, userId);
+
+        return new EmailConnectionResult
+        {
+            Success = true,
+            EmailAccountId = emailAccount.Id,
+            EmailAddress = emailAddress,
+            TokenExpiresAt = emailAccount.TokenExpiresAt
+        };
     }
 
     public async Task<IEnumerable<EmailMessage>> GetEmailsAsync(
@@ -159,259 +147,230 @@ public class GmailClient : IGmailClient
         EmailFilter filter,
         CancellationToken cancellationToken = default)
     {
-        try
+        _logger.LogInformation("Retrieving emails for account {EmailAccountId}", emailAccount.Id);
+
+        // Check if token needs refresh
+        if (emailAccount.TokenExpiresAt <= DateTime.UtcNow.AddMinutes(5))
         {
-            _logger.LogInformation("Retrieving emails for account {EmailAccountId}", emailAccount.Id);
-
-            // Check if token needs refresh
-            if (emailAccount.TokenExpiresAt <= DateTime.UtcNow.AddMinutes(5))
+            var refreshed = await RefreshAccessTokenAsync(emailAccount.Id, cancellationToken);
+            if (!refreshed)
             {
-                var refreshed = await RefreshAccessTokenAsync(emailAccount.Id, cancellationToken);
-                if (!refreshed)
-                {
-                    _logger.LogError("Failed to refresh access token for account {EmailAccountId}", emailAccount.Id);
-                    return Enumerable.Empty<EmailMessage>();
-                }
-                // Reload account with new token
-                emailAccount = (await _emailAccountRepository.GetByIdAsync(emailAccount.Id, cancellationToken))!;
+                _logger.LogError("Failed to refresh access token for account {EmailAccountId}", emailAccount.Id);
+                return Enumerable.Empty<EmailMessage>();
             }
+            // Reload account with new token
+            emailAccount = (await _emailAccountRepository.GetByIdAsync(emailAccount.Id, cancellationToken))!;
+        }
 
-            // Decrypt access token
-            var accessToken = _tokenEncryptionService.Decrypt(emailAccount!.EncryptedAccessToken);
+        // Decrypt access token
+        var accessToken = _tokenEncryptionService.Decrypt(emailAccount!.EncryptedAccessToken);
 
-            // Create Gmail service
-            var credential = GoogleCredential.FromAccessToken(accessToken);
-            var service = new GmailService(new BaseClientService.Initializer
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = "WiseSub"
-            });
+        // Create Gmail service
+        var credential = GoogleCredential.FromAccessToken(accessToken);
+        var service = new GmailService(new BaseClientService.Initializer
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "WiseSub"
+        });
 
-            // Build query string for Gmail API
-            var query = BuildGmailQuery(filter);
+        // Build query string for Gmail API
+        var query = BuildGmailQuery(filter);
 
-            // List messages
-            var listRequest = service.Users.Messages.List("me");
-            listRequest.Q = query;
-            listRequest.MaxResults = filter.MaxResults ?? 500;
+        // List messages
+        var listRequest = service.Users.Messages.List("me");
+        listRequest.Q = query;
+        listRequest.MaxResults = filter.MaxResults ?? 500;
 
-            var messages = new List<EmailMessage>();
-            var response = await listRequest.ExecuteAsync(cancellationToken);
+        var messages = new List<EmailMessage>();
+        var response = await listRequest.ExecuteAsync(cancellationToken);
 
-            if (response.Messages == null || response.Messages.Count == 0)
-            {
-                _logger.LogInformation("No emails found for account {EmailAccountId} with filter", emailAccount.Id);
-                return messages;
-            }
-
-            // Retrieve full message details (in batches to respect rate limits)
-            var batchSize = 50;
-            for (int i = 0; i < response.Messages.Count; i += batchSize)
-            {
-                var batch = response.Messages.Skip(i).Take(batchSize);
-                var batchTasks = batch.Select(async msg =>
-                {
-                    try
-                    {
-                        var messageRequest = service.Users.Messages.Get("me", msg.Id);
-                        messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
-                        var fullMessage = await messageRequest.ExecuteAsync(cancellationToken);
-                        return ParseGmailMessage(fullMessage);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to retrieve message {MessageId}", msg.Id);
-                        return null;
-                    }
-                });
-
-                var batchResults = await Task.WhenAll(batchTasks);
-                messages.AddRange(batchResults.Where(m => m != null)!);
-
-                // Rate limiting: small delay between batches
-                if (i + batchSize < response.Messages.Count)
-                {
-                    await Task.Delay(100, cancellationToken);
-                }
-            }
-
-            // Store the current historyId for future incremental syncs
-            if (response.Messages.Count > 0)
-            {
-                try
-                {
-                    // Get the latest message to extract historyId
-                    var latestMessageRequest = service.Users.Messages.Get("me", response.Messages[0].Id);
-                    latestMessageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Minimal;
-                    var latestMessage = await latestMessageRequest.ExecuteAsync(cancellationToken);
-                    
-                    if (latestMessage.HistoryId.HasValue)
-                    {
-                        await _emailAccountRepository.UpdateHistoryIdAsync(
-                            emailAccount.Id, 
-                            latestMessage.HistoryId.Value.ToString(), 
-                            cancellationToken);
-                        
-                        _logger.LogInformation("Updated historyId to {HistoryId} for account {EmailAccountId}",
-                            latestMessage.HistoryId.Value, emailAccount.Id);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to update historyId for account {EmailAccountId}", emailAccount.Id);
-                }
-            }
-
-            // Update last scan timestamp
-            await _emailAccountRepository.UpdateLastScanAsync(emailAccount.Id, DateTime.UtcNow, cancellationToken);
-
-            _logger.LogInformation("Retrieved {Count} emails for account {EmailAccountId}",
-                messages.Count, emailAccount.Id);
-
+        if (response.Messages == null || response.Messages.Count == 0)
+        {
+            _logger.LogInformation("No emails found for account {EmailAccountId} with filter", emailAccount.Id);
             return messages;
         }
-        catch (Exception ex)
+
+        // Retrieve full message details (in batches to respect rate limits)
+        var batchSize = 50;
+        for (int i = 0; i < response.Messages.Count; i += batchSize)
         {
-            _logger.LogError(ex, "Error retrieving emails for account {EmailAccountId}", emailAccount.Id);
-            return Enumerable.Empty<EmailMessage>();
+            var batch = response.Messages.Skip(i).Take(batchSize);
+            var batchTasks = batch.Select(async msg =>
+            {
+                var messageRequest = service.Users.Messages.Get("me", msg.Id);
+                messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
+                var fullMessage = await messageRequest.ExecuteAsync(cancellationToken);
+                return ParseGmailMessage(fullMessage);
+            });
+
+            var batchResults = await Task.WhenAll(batchTasks);
+            messages.AddRange(batchResults.Where(m => m != null)!);
+
+            // Rate limiting: small delay between batches
+            if (i + batchSize < response.Messages.Count)
+            {
+                await Task.Delay(100, cancellationToken);
+            }
         }
+
+        // Store the current historyId for future incremental syncs
+        if (response.Messages.Count > 0)
+        {
+            // Get the latest message to extract historyId
+            var latestMessageRequest = service.Users.Messages.Get("me", response.Messages[0].Id);
+            latestMessageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Minimal;
+            var latestMessage = await latestMessageRequest.ExecuteAsync(cancellationToken);
+            
+            if (latestMessage.HistoryId.HasValue)
+            {
+                await _emailAccountRepository.UpdateHistoryIdAsync(
+                    emailAccount.Id, 
+                    latestMessage.HistoryId.Value.ToString(), 
+                    cancellationToken);
+                
+                _logger.LogInformation("Updated historyId to {HistoryId} for account {EmailAccountId}",
+                    latestMessage.HistoryId.Value, emailAccount.Id);
+            }
+        }
+
+        // Update last scan timestamp
+        await _emailAccountRepository.UpdateLastScanAsync(emailAccount.Id, DateTime.UtcNow, cancellationToken);
+
+        _logger.LogInformation("Retrieved {Count} emails for account {EmailAccountId}",
+            messages.Count, emailAccount.Id);
+
+        return messages;
     }
 
     public async Task<bool> RefreshAccessTokenAsync(
         string emailAccountId,
         CancellationToken cancellationToken = default)
     {
-        try
+        _logger.LogInformation("Refreshing access token for account {EmailAccountId}", emailAccountId);
+
+        // Get email account
+        var emailAccount = await _emailAccountRepository.GetByIdAsync(emailAccountId, cancellationToken);
+        if (emailAccount == null)
         {
-            _logger.LogInformation("Refreshing access token for account {EmailAccountId}", emailAccountId);
-
-            // Get email account
-            var emailAccount = await _emailAccountRepository.GetByIdAsync(emailAccountId, cancellationToken);
-            if (emailAccount == null)
-            {
-                _logger.LogWarning("Email account {EmailAccountId} not found", emailAccountId);
-                return false;
-            }
-
-            // Decrypt refresh token
-            var refreshToken = _tokenEncryptionService.Decrypt(emailAccount.EncryptedRefreshToken);
-            if (string.IsNullOrEmpty(refreshToken))
-            {
-                _logger.LogError("No refresh token available for account {EmailAccountId}", emailAccountId);
-                return false;
-            }
-
-            // Request new access token
-            var clientId = _configuration["Authentication:Google:ClientId"];
-            var clientSecret = _configuration["Authentication:Google:ClientSecret"];
-
-            var requestData = new Dictionary<string, string>
-            {
-                { "client_id", clientId ?? "" },
-                { "client_secret", clientSecret ?? "" },
-                { "refresh_token", refreshToken },
-                { "grant_type", "refresh_token" }
-            };
-
-            var response = await _httpClient.PostAsync(
-                "https://oauth2.googleapis.com/token",
-                new FormUrlEncodedContent(requestData),
-                cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogError("Failed to refresh token for account {EmailAccountId}: {Error}",
-                    emailAccountId, errorContent);
-                return false;
-            }
-
-            var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken);
-            if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
-            {
-                _logger.LogError("Invalid token response for account {EmailAccountId}", emailAccountId);
-                return false;
-            }
-
-            // Update tokens in database
-            var encryptedAccessToken = _tokenEncryptionService.Encrypt(tokenResponse.AccessToken);
-            var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
-
-            await _emailAccountRepository.UpdateTokensAsync(
-                emailAccountId,
-                encryptedAccessToken,
-                emailAccount.EncryptedRefreshToken, // Keep same refresh token
-                expiresAt,
-                cancellationToken);
-
-            _logger.LogInformation("Successfully refreshed access token for account {EmailAccountId}", emailAccountId);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error refreshing access token for account {EmailAccountId}", emailAccountId);
+            _logger.LogWarning("Email account {EmailAccountId} not found", emailAccountId);
             return false;
         }
+
+        return await RefreshAccessTokenAsync(emailAccount, cancellationToken);
+    }
+
+    public async Task<bool> RefreshAccessTokenAsync(
+        EmailAccount emailAccount,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Refreshing access token for account {EmailAccountId}", emailAccount.Id);
+
+        // Decrypt refresh token
+        var refreshToken = _tokenEncryptionService.Decrypt(emailAccount.EncryptedRefreshToken);
+        if (string.IsNullOrEmpty(refreshToken))
+        {
+            _logger.LogError("No refresh token available for account {EmailAccountId}", emailAccount.Id);
+            return false;
+        }
+
+        // Request new access token
+        var clientId = _configuration["Authentication:Google:ClientId"];
+        var clientSecret = _configuration["Authentication:Google:ClientSecret"];
+
+        var requestData = new Dictionary<string, string>
+        {
+            { "client_id", clientId ?? "" },
+            { "client_secret", clientSecret ?? "" },
+            { "refresh_token", refreshToken },
+            { "grant_type", "refresh_token" }
+        };
+
+        var response = await _httpClient.PostAsync(
+            "https://oauth2.googleapis.com/token",
+            new FormUrlEncodedContent(requestData),
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Failed to refresh token for account {EmailAccountId}: {Error}",
+                emailAccount.Id, errorContent);
+            return false;
+        }
+
+        var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken);
+        if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
+        {
+            _logger.LogError("Invalid token response for account {EmailAccountId}", emailAccount.Id);
+            return false;
+        }
+
+        // Update tokens in database
+        var encryptedAccessToken = _tokenEncryptionService.Encrypt(tokenResponse.AccessToken);
+        var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+
+        await _emailAccountRepository.UpdateTokensAsync(
+            emailAccount.Id,
+            encryptedAccessToken,
+            emailAccount.EncryptedRefreshToken, // Keep same refresh token
+            expiresAt,
+            cancellationToken);
+
+        _logger.LogInformation("Successfully refreshed access token for account {EmailAccountId}", emailAccount.Id);
+        return true;
     }
 
     public async Task<bool> RevokeAccessAsync(
         string emailAccountId,
         CancellationToken cancellationToken = default)
     {
-        try
+        _logger.LogInformation("Revoking access for account {EmailAccountId}", emailAccountId);
+
+        // Get email account
+        var emailAccount = await _emailAccountRepository.GetByIdAsync(emailAccountId, cancellationToken);
+        if (emailAccount == null)
         {
-            _logger.LogInformation("Revoking access for account {EmailAccountId}", emailAccountId);
-
-            // Get email account
-            var emailAccount = await _emailAccountRepository.GetByIdAsync(emailAccountId, cancellationToken);
-            if (emailAccount == null)
-            {
-                _logger.LogWarning("Email account {EmailAccountId} not found", emailAccountId);
-                return false;
-            }
-
-            // Decrypt refresh token
-            var refreshToken = _tokenEncryptionService.Decrypt(emailAccount.EncryptedRefreshToken);
-
-            // Revoke token with Google
-            if (!string.IsNullOrEmpty(refreshToken))
-            {
-                var requestData = new Dictionary<string, string>
-                {
-                    { "token", refreshToken }
-                };
-
-                try
-                {
-                    var response = await _httpClient.PostAsync(
-                        "https://oauth2.googleapis.com/revoke",
-                        new FormUrlEncodedContent(requestData),
-                        cancellationToken);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        _logger.LogWarning("Failed to revoke token with Google for account {EmailAccountId}",
-                            emailAccountId);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Error revoking token with Google for account {EmailAccountId}",
-                        emailAccountId);
-                }
-            }
-
-            // Delete tokens and mark as inactive in database
-            await _emailAccountRepository.RevokeAccessAsync(emailAccountId, cancellationToken);
-
-            _logger.LogInformation("Successfully revoked access for account {EmailAccountId}", emailAccountId);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error revoking access for account {EmailAccountId}", emailAccountId);
+            _logger.LogWarning("Email account {EmailAccountId} not found", emailAccountId);
             return false;
         }
+
+        return await RevokeAccessAsync(emailAccount, cancellationToken);
+    }
+
+    public async Task<bool> RevokeAccessAsync(
+        EmailAccount emailAccount,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Revoking access for account {EmailAccountId}", emailAccount.Id);
+
+        // Decrypt refresh token
+        var refreshToken = _tokenEncryptionService.Decrypt(emailAccount.EncryptedRefreshToken);
+
+        // Revoke token with Google
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            var requestData = new Dictionary<string, string>
+            {
+                { "token", refreshToken }
+            };
+
+            var response = await _httpClient.PostAsync(
+                "https://oauth2.googleapis.com/revoke",
+                new FormUrlEncodedContent(requestData),
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to revoke token with Google for account {EmailAccountId}",
+                    emailAccount.Id);
+            }
+        }
+
+        // Delete tokens and mark as inactive in database
+        await _emailAccountRepository.RevokeAccessAsync(emailAccount.Id, cancellationToken);
+
+        _logger.LogInformation("Successfully revoked access for account {EmailAccountId}", emailAccount.Id);
+        return true;
     }
 
     private async Task<TokenResponse?> ExchangeCodeForTokensAsync(
@@ -450,23 +409,15 @@ public class GmailClient : IGmailClient
 
     private async Task<string?> GetUserEmailAddressAsync(string accessToken, CancellationToken cancellationToken)
     {
-        try
+        var credential = GoogleCredential.FromAccessToken(accessToken);
+        var service = new GmailService(new BaseClientService.Initializer
         {
-            var credential = GoogleCredential.FromAccessToken(accessToken);
-            var service = new GmailService(new BaseClientService.Initializer
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = "WiseSub"
-            });
+            HttpClientInitializer = credential,
+            ApplicationName = "WiseSub"
+        });
 
-            var profile = await service.Users.GetProfile("me").ExecuteAsync(cancellationToken);
-            return profile.EmailAddress;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get user email address");
-            return null;
-        }
+        var profile = await service.Users.GetProfile("me").ExecuteAsync(cancellationToken);
+        return profile.EmailAddress;
     }
 
     private string BuildGmailQuery(EmailFilter filter)
@@ -608,156 +559,140 @@ public class GmailClient : IGmailClient
         EmailFilter filter,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Retrieving new emails since last scan for account {EmailAccountId}", emailAccount.Id);
+
+        // If no historyId exists, fall back to full scan
+        if (string.IsNullOrEmpty(emailAccount.GmailHistoryId))
+        {
+            _logger.LogInformation("No historyId found for account {EmailAccountId}, performing full scan", emailAccount.Id);
+            return await GetEmailsAsync(emailAccount, filter, cancellationToken);
+        }
+
+        // Check if token needs refresh
+        if (emailAccount.TokenExpiresAt <= DateTime.UtcNow.AddMinutes(5))
+        {
+            var refreshed = await RefreshAccessTokenAsync(emailAccount.Id, cancellationToken);
+            if (!refreshed)
+            {
+                _logger.LogError("Failed to refresh access token for account {EmailAccountId}", emailAccount.Id);
+                return Enumerable.Empty<EmailMessage>();
+            }
+            // Reload account with new token
+            emailAccount = (await _emailAccountRepository.GetByIdAsync(emailAccount.Id, cancellationToken))!;
+        }
+
+        // Decrypt access token
+        var accessToken = _tokenEncryptionService.Decrypt(emailAccount!.EncryptedAccessToken);
+
+        // Create Gmail service
+        var credential = GoogleCredential.FromAccessToken(accessToken);
+        var service = new GmailService(new BaseClientService.Initializer
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "WiseSub"
+        });
+
+        // Use Gmail History API to get changes since last historyId
+        var historyRequest = service.Users.History.List("me");
+        historyRequest.StartHistoryId = ulong.Parse(emailAccount.GmailHistoryId!);
+        historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
+
+        var messages = new List<EmailMessage>();
+        var newMessageIds = new HashSet<string>();
+
         try
         {
-            _logger.LogInformation("Retrieving new emails since last scan for account {EmailAccountId}", emailAccount.Id);
+            var historyResponse = await historyRequest.ExecuteAsync(cancellationToken);
 
-            // If no historyId exists, fall back to full scan
-            if (string.IsNullOrEmpty(emailAccount.GmailHistoryId))
+            if (historyResponse.History != null && historyResponse.History.Count > 0)
             {
-                _logger.LogInformation("No historyId found for account {EmailAccountId}, performing full scan", emailAccount.Id);
-                return await GetEmailsAsync(emailAccount, filter, cancellationToken);
-            }
-
-            // Check if token needs refresh
-            if (emailAccount.TokenExpiresAt <= DateTime.UtcNow.AddMinutes(5))
-            {
-                var refreshed = await RefreshAccessTokenAsync(emailAccount.Id, cancellationToken);
-                if (!refreshed)
+                // Collect all new message IDs from history
+                foreach (var history in historyResponse.History)
                 {
-                    _logger.LogError("Failed to refresh access token for account {EmailAccountId}", emailAccount.Id);
-                    return Enumerable.Empty<EmailMessage>();
+                    if (history.MessagesAdded != null)
+                    {
+                        foreach (var messageAdded in history.MessagesAdded)
+                        {
+                            if (messageAdded.Message?.Id != null)
+                            {
+                                newMessageIds.Add(messageAdded.Message.Id);
+                            }
+                        }
+                    }
                 }
-                // Reload account with new token
-                emailAccount = (await _emailAccountRepository.GetByIdAsync(emailAccount.Id, cancellationToken))!;
-            }
 
-            // Decrypt access token
-            var accessToken = _tokenEncryptionService.Decrypt(emailAccount!.EncryptedAccessToken);
+                _logger.LogInformation("Found {Count} new messages from history for account {EmailAccountId}",
+                    newMessageIds.Count, emailAccount.Id);
 
-            // Create Gmail service
-            var credential = GoogleCredential.FromAccessToken(accessToken);
-            var service = new GmailService(new BaseClientService.Initializer
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = "WiseSub"
-            });
-
-            // Use Gmail History API to get changes since last historyId
-            var historyRequest = service.Users.History.List("me");
-            historyRequest.StartHistoryId = ulong.Parse(emailAccount.GmailHistoryId!);
-            historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
-
-            var messages = new List<EmailMessage>();
-            var newMessageIds = new HashSet<string>();
-
-            try
-            {
-                var historyResponse = await historyRequest.ExecuteAsync(cancellationToken);
-
-                if (historyResponse.History != null && historyResponse.History.Count > 0)
+                // Retrieve full message details for new messages (in batches)
+                var batchSize = 50;
+                var messageIdList = newMessageIds.ToList();
+                
+                for (int i = 0; i < messageIdList.Count; i += batchSize)
                 {
-                    // Collect all new message IDs from history
-                    foreach (var history in historyResponse.History)
+                    var batch = messageIdList.Skip(i).Take(batchSize);
+                    var batchTasks = batch.Select(async msgId =>
                     {
-                        if (history.MessagesAdded != null)
-                        {
-                            foreach (var messageAdded in history.MessagesAdded)
-                            {
-                                if (messageAdded.Message?.Id != null)
-                                {
-                                    newMessageIds.Add(messageAdded.Message.Id);
-                                }
-                            }
-                        }
-                    }
-
-                    _logger.LogInformation("Found {Count} new messages from history for account {EmailAccountId}",
-                        newMessageIds.Count, emailAccount.Id);
-
-                    // Retrieve full message details for new messages (in batches)
-                    var batchSize = 50;
-                    var messageIdList = newMessageIds.ToList();
-                    
-                    for (int i = 0; i < messageIdList.Count; i += batchSize)
-                    {
-                        var batch = messageIdList.Skip(i).Take(batchSize);
-                        var batchTasks = batch.Select(async msgId =>
-                        {
-                            try
-                            {
-                                var messageRequest = service.Users.Messages.Get("me", msgId);
-                                messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
-                                var fullMessage = await messageRequest.ExecuteAsync(cancellationToken);
-                                
-                                // Apply filter criteria
-                                var parsedMessage = ParseGmailMessage(fullMessage);
-                                if (MatchesFilter(parsedMessage, filter))
-                                {
-                                    return parsedMessage;
-                                }
-                                return null;
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed to retrieve message {MessageId}", msgId);
-                                return null;
-                            }
-                        });
-
-                        var batchResults = await Task.WhenAll(batchTasks);
-                        messages.AddRange(batchResults.Where(m => m != null)!);
-
-                        // Rate limiting: small delay between batches
-                        if (i + batchSize < messageIdList.Count)
-                        {
-                            await Task.Delay(100, cancellationToken);
-                        }
-                    }
-
-                    // Update historyId to the latest
-                    if (historyResponse.HistoryId.HasValue)
-                    {
-                        await _emailAccountRepository.UpdateHistoryIdAsync(
-                            emailAccount.Id,
-                            historyResponse.HistoryId.Value.ToString(),
-                            cancellationToken);
+                        var messageRequest = service.Users.Messages.Get("me", msgId);
+                        messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
+                        var fullMessage = await messageRequest.ExecuteAsync(cancellationToken);
                         
-                        _logger.LogInformation("Updated historyId to {HistoryId} for account {EmailAccountId}",
-                            historyResponse.HistoryId.Value, emailAccount.Id);
+                        // Apply filter criteria
+                        var parsedMessage = ParseGmailMessage(fullMessage);
+                        if (MatchesFilter(parsedMessage, filter))
+                        {
+                            return parsedMessage;
+                        }
+                        return null;
+                    });
+
+                    var batchResults = await Task.WhenAll(batchTasks);
+                    messages.AddRange(batchResults.Where(m => m != null)!);
+
+                    // Rate limiting: small delay between batches
+                    if (i + batchSize < messageIdList.Count)
+                    {
+                        await Task.Delay(100, cancellationToken);
                     }
                 }
-                else
+
+                // Update historyId to the latest
+                if (historyResponse.HistoryId.HasValue)
                 {
-                    _logger.LogInformation("No new messages found in history for account {EmailAccountId}", emailAccount.Id);
+                    await _emailAccountRepository.UpdateHistoryIdAsync(
+                        emailAccount.Id,
+                        historyResponse.HistoryId.Value.ToString(),
+                        cancellationToken);
+                    
+                    _logger.LogInformation("Updated historyId to {HistoryId} for account {EmailAccountId}",
+                        historyResponse.HistoryId.Value, emailAccount.Id);
                 }
             }
-            catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+            else
             {
-                // HistoryId is too old or invalid, fall back to full scan
-                _logger.LogWarning("HistoryId {HistoryId} is invalid or too old for account {EmailAccountId}, performing full scan",
-                    emailAccount.GmailHistoryId, emailAccount.Id);
-                
-                // Clear the invalid historyId
-                await _emailAccountRepository.UpdateHistoryIdAsync(emailAccount.Id, null!, cancellationToken);
-                
-                // Perform full scan
-                return await GetEmailsAsync(emailAccount.Id, filter, cancellationToken);
+                _logger.LogInformation("No new messages found in history for account {EmailAccountId}", emailAccount.Id);
             }
-
-            // Update last scan timestamp
-            await _emailAccountRepository.UpdateLastScanAsync(emailAccount.Id, DateTime.UtcNow, cancellationToken);
-
-            _logger.LogInformation("Retrieved {Count} new emails for account {EmailAccountId} using incremental sync",
-                messages.Count, emailAccount.Id);
-
-            return messages;
         }
-        catch (Exception ex)
+        catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            _logger.LogError(ex, "Error retrieving new emails for account {EmailAccountId}", emailAccount.Id);
-            return Enumerable.Empty<EmailMessage>();
+            // HistoryId is too old or invalid, fall back to full scan
+            _logger.LogWarning("HistoryId {HistoryId} is invalid or too old for account {EmailAccountId}, performing full scan",
+                emailAccount.GmailHistoryId, emailAccount.Id);
+            
+            // Clear the invalid historyId
+            await _emailAccountRepository.UpdateHistoryIdAsync(emailAccount.Id, null!, cancellationToken);
+            
+            // Perform full scan
+            return await GetEmailsAsync(emailAccount.Id, filter, cancellationToken);
         }
+
+        // Update last scan timestamp
+        await _emailAccountRepository.UpdateLastScanAsync(emailAccount.Id, DateTime.UtcNow, cancellationToken);
+
+        _logger.LogInformation("Retrieved {Count} new emails for account {EmailAccountId} using incremental sync",
+            messages.Count, emailAccount.Id);
+
+        return messages;
     }
 
     private bool MatchesFilter(EmailMessage message, EmailFilter filter)

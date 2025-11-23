@@ -27,23 +27,16 @@ public class HealthService : IHealthService
 
     public async Task<Result<DatabaseHealthResponse>> CheckDatabaseHealthAsync()
     {
-        try
+        var canConnect = await _dbContext.Database.CanConnectAsync();
+        
+        var response = new DatabaseHealthResponse
         {
-            var canConnect = await _dbContext.Database.CanConnectAsync();
-            
-            var response = new DatabaseHealthResponse
-            {
-                Status = canConnect ? "healthy" : "unhealthy",
-                Database = "SQLite",
-                CanConnect = canConnect,
-                Timestamp = DateTime.UtcNow
-            };
+            Status = canConnect ? "healthy" : "unhealthy",
+            Database = "SQLite",
+            CanConnect = canConnect,
+            Timestamp = DateTime.UtcNow
+        };
 
-            return Result.Success(response);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<DatabaseHealthResponse>($"Database health check failed: {ex.Message}");
-        }
+        return Result.Success(response);
     }
 }

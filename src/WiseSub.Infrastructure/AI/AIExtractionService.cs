@@ -31,88 +31,72 @@ public class AIExtractionService : IAIExtractionService
         EmailMessage email,
         CancellationToken cancellationToken = default)
     {
-        try
+        _logger.LogDebug("Classifying email from {Sender} with subject: {Subject}", 
+            email.Sender, email.Subject);
+
+        var systemPrompt = GetClassificationSystemPrompt();
+        var userPrompt = GetClassificationUserPrompt(email);
+
+        var response = await _openAIClient.GetJsonCompletionAsync<ClassificationResponse>(
+            systemPrompt,
+            userPrompt,
+            temperature: 0.1,
+            cancellationToken);
+
+        if (response == null)
         {
-            _logger.LogDebug("Classifying email from {Sender} with subject: {Subject}", 
-                email.Sender, email.Subject);
-
-            var systemPrompt = GetClassificationSystemPrompt();
-            var userPrompt = GetClassificationUserPrompt(email);
-
-            var response = await _openAIClient.GetJsonCompletionAsync<ClassificationResponse>(
-                systemPrompt,
-                userPrompt,
-                temperature: 0.1,
-                cancellationToken);
-
-            if (response == null)
+            _logger.LogWarning("Received null response from OpenAI for classification");
+            return new ClassificationResult
             {
-                _logger.LogWarning("Received null response from OpenAI for classification");
-                return new ClassificationResult
-                {
-                    IsSubscriptionRelated = false,
-                    Confidence = 0.0,
-                    Reason = "Failed to get response from AI"
-                };
-            }
-
-            var result = new ClassificationResult
-            {
-                IsSubscriptionRelated = response.IsSubscriptionRelated,
-                Confidence = response.Confidence,
-                EmailType = response.EmailType,
-                Reason = response.Reason
+                IsSubscriptionRelated = false,
+                Confidence = 0.0,
+                Reason = "Failed to get response from AI"
             };
-
-            _logger.LogInformation(
-                "Email classified as {IsSubscriptionRelated} with confidence {Confidence:F2}",
-                result.IsSubscriptionRelated, result.Confidence);
-
-            return result;
         }
-        catch (Exception ex)
+
+        var result = new ClassificationResult
         {
-            _logger.LogError(ex, "Error classifying email");
-            throw;
-        }
+            IsSubscriptionRelated = response.IsSubscriptionRelated,
+            Confidence = response.Confidence,
+            EmailType = response.EmailType,
+            Reason = response.Reason
+        };
+
+        _logger.LogInformation(
+            "Email classified as {IsSubscriptionRelated} with confidence {Confidence:F2}",
+            result.IsSubscriptionRelated, result.Confidence);
+
+        return result;
     }
 
     public async Task<ExtractionResult> ExtractSubscriptionDataAsync(
         EmailMessage email,
         CancellationToken cancellationToken = default)
     {
-        try
+        _logger.LogDebug("Extracting subscription data from email: {Subject}", email.Subject);
+
+        var systemPrompt = GetExtractionSystemPrompt();
+        var userPrompt = GetExtractionUserPrompt(email);
+
+        var response = await _openAIClient.GetJsonCompletionAsync<ExtractionResponse>(
+            systemPrompt,
+            userPrompt,
+            temperature: 0.1,
+            cancellationToken);
+
+        if (response == null)
         {
-            _logger.LogDebug("Extracting subscription data from email: {Subject}", email.Subject);
-
-            var systemPrompt = GetExtractionSystemPrompt();
-            var userPrompt = GetExtractionUserPrompt(email);
-
-            var response = await _openAIClient.GetJsonCompletionAsync<ExtractionResponse>(
-                systemPrompt,
-                userPrompt,
-                temperature: 0.1,
-                cancellationToken);
-
-            if (response == null)
-            {
-                _logger.LogWarning("Received null response from OpenAI for extraction");
-                return CreateFailedExtractionResult("Failed to get response from AI");
-            }
-
-            var result = MapExtractionResponse(response);
-
-            _logger.LogInformation(
-                "Extracted subscription: {ServiceName}, Price: {Price} {Currency}, Confidence: {Confidence:F2}",
-                result.ServiceName, result.Price, result.Currency, result.ConfidenceScore);
-
-            return result;
+            _logger.LogWarning("Received null response from OpenAI for extraction");
+            return CreateFailedExtractionResult("Failed to get response from AI");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error extracting subscription data");
-            throw;
-        }
+
+        var result = MapExtractionResponse(response);
+
+        _logger.LogInformation(
+            "Extracted subscription: {ServiceName}, Price: {Price} {Currency}, Confidence: {Confidence:F2}",
+            result.ServiceName, result.Price, result.Currency, result.ConfidenceScore);
+
+        return result;
     }
 
     private string GetClassificationSystemPrompt()

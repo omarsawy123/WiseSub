@@ -1,4 +1,5 @@
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Entities;
 
 namespace WiseSub.Application.Common.Interfaces;
 
@@ -10,12 +11,12 @@ public interface IEmailIngestionService
     /// <summary>
     /// Scans an email account for subscription-related emails
     /// </summary>
-    /// <param name="emailAccountId">The email account ID to scan</param>
-    /// <param name="since">Retrieve emails since this date (defaults to 12 months ago)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Number of emails retrieved</returns>
+    /// <param name="emailAccount"></param>
+    /// <param name="since"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     Task<int> ScanEmailAccountAsync(
-        string emailAccountId,
+        EmailAccount emailAccount,
         DateTime? since = null,
         CancellationToken cancellationToken = default);
 

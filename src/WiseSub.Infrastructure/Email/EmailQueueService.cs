@@ -37,65 +37,55 @@ public class EmailQueueService : IEmailQueueService
         EmailProcessingPriority priority = EmailProcessingPriority.Normal,
         CancellationToken cancellationToken = default)
     {
-        try
+        // Check if email already exists in metadata (avoid duplicates)
+        var existingMetadata = await _emailMetadataRepository.GetByExternalEmailIdAsync(
+            email.Id, cancellationToken);
+
+        if (existingMetadata != null)
         {
-            // Check if email already exists in metadata (avoid duplicates)
-            var existingMetadata = await _emailMetadataRepository.GetByExternalEmailIdAsync(
-                email.Id, cancellationToken);
-
-            if (existingMetadata != null)
-            {
-                _logger.LogDebug(
-                    "Email {EmailId} already exists in metadata, skipping queue",
-                    email.Id);
-                return existingMetadata.Id;
-            }
-
-            // Create email metadata record
-            var emailMetadata = new EmailMetadata
-            {
-                Id = Guid.NewGuid().ToString(),
-                EmailAccountId = emailAccountId,
-                ExternalEmailId = email.Id,
-                Sender = email.Sender,
-                Subject = email.Subject,
-                ReceivedAt = email.ReceivedAt,
-                IsProcessed = false,
-                ProcessedAt = null,
-                SubscriptionId = null
-            };
-
-            // Save to database
-            await _emailMetadataRepository.AddAsync(emailMetadata, cancellationToken);
-
-            // Create queued email
-            var queuedEmail = new QueuedEmail
-            {
-                EmailMetadataId = emailMetadata.Id,
-                EmailAccountId = emailAccountId,
-                Email = email,
-                Priority = priority,
-                QueuedAt = DateTime.UtcNow
-            };
-
-            // Add to appropriate priority queue
-            var queue = GetQueueForPriority(priority);
-            queue.Enqueue(queuedEmail);
-            _queuedEmailIds.TryAdd(emailMetadata.Id, true);
-
-            _logger.LogInformation(
-                "Queued email {EmailId} with priority {Priority} for processing. Metadata ID: {MetadataId}",
-                email.Id, priority, emailMetadata.Id);
-
-            return emailMetadata.Id;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error queueing email {EmailId} for processing",
+            _logger.LogDebug(
+                "Email {EmailId} already exists in metadata, skipping queue",
                 email.Id);
-            throw;
+            return existingMetadata.Id;
         }
+
+        // Create email metadata record
+        var emailMetadata = new EmailMetadata
+        {
+            Id = Guid.NewGuid().ToString(),
+            EmailAccountId = emailAccountId,
+            ExternalEmailId = email.Id,
+            Sender = email.Sender,
+            Subject = email.Subject,
+            ReceivedAt = email.ReceivedAt,
+            IsProcessed = false,
+            ProcessedAt = null,
+            SubscriptionId = null
+        };
+
+        // Save to database
+        await _emailMetadataRepository.AddAsync(emailMetadata, cancellationToken);
+
+        // Create queued email
+        var queuedEmail = new QueuedEmail
+        {
+            EmailMetadataId = emailMetadata.Id,
+            EmailAccountId = emailAccountId,
+            Email = email,
+            Priority = priority,
+            QueuedAt = DateTime.UtcNow
+        };
+
+        // Add to appropriate priority queue
+        var queue = GetQueueForPriority(priority);
+        queue.Enqueue(queuedEmail);
+        _queuedEmailIds.TryAdd(emailMetadata.Id, true);
+
+        _logger.LogInformation(
+            "Queued email {EmailId} with priority {Priority} for processing. Metadata ID: {MetadataId}",
+            email.Id, priority, emailMetadata.Id);
+
+        return emailMetadata.Id;
     }
 
     public async Task<QueueStatus> GetQueueStatusAsync(CancellationToken cancellationToken = default)
@@ -150,36 +140,26 @@ public class EmailQueueService : IEmailQueueService
         string? subscriptionId = null,
         CancellationToken cancellationToken = default)
     {
-        try
+        var emailMetadata = await _emailMetadataRepository.GetByIdAsync(
+            emailMetadataId, cancellationToken);
+
+        if (emailMetadata == null)
         {
-            var emailMetadata = await _emailMetadataRepository.GetByIdAsync(
-                emailMetadataId, cancellationToken);
-
-            if (emailMetadata == null)
-            {
-                _logger.LogWarning(
-                    "Email metadata {EmailMetadataId} not found when marking as processed",
-                    emailMetadataId);
-                return;
-            }
-
-            emailMetadata.IsProcessed = true;
-            emailMetadata.ProcessedAt = DateTime.UtcNow;
-            emailMetadata.SubscriptionId = subscriptionId;
-
-            await _emailMetadataRepository.UpdateAsync(emailMetadata, cancellationToken);
-
-            _logger.LogInformation(
-                "Marked email {EmailMetadataId} as processed. Subscription ID: {SubscriptionId}",
-                emailMetadataId, subscriptionId ?? "None");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error marking email {EmailMetadataId} as processed",
+            _logger.LogWarning(
+                "Email metadata {EmailMetadataId} not found when marking as processed",
                 emailMetadataId);
-            throw;
+            return;
         }
+
+        emailMetadata.IsProcessed = true;
+        emailMetadata.ProcessedAt = DateTime.UtcNow;
+        emailMetadata.SubscriptionId = subscriptionId;
+
+        await _emailMetadataRepository.UpdateAsync(emailMetadata, cancellationToken);
+
+        _logger.LogInformation(
+            "Marked email {EmailMetadataId} as processed. Subscription ID: {SubscriptionId}",
+            emailMetadataId, subscriptionId ?? "None");
     }
 
     public async Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default)

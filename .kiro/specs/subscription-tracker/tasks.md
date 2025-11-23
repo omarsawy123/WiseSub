@@ -111,11 +111,6 @@
   - **Validates: Requirements 8.4**
 
 - [ ] 7. Implement AI extraction service with OpenAI
-
-
-
-
-
   - Create IOpenAIClient wrapper for OpenAI API
   - Implement email classification (subscription-related or not)
   - Create structured extraction prompt for service name, price, billing cycle, renewal date, category

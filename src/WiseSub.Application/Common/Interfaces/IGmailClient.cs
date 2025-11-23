@@ -1,4 +1,5 @@
 using WiseSub.Application.Common.Models;
+using WiseSub.Domain.Entities;
 
 namespace WiseSub.Application.Common.Interfaces;
 
@@ -26,10 +27,10 @@ public interface IGmailClient
     /// <param name="filter">Filter criteria for emails</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of email messages</returns>
-    Task<IEnumerable<EmailMessage>> GetEmailsAsync(
-        string emailAccountId, 
-        EmailFilter filter, 
-        CancellationToken cancellationToken = default);
+    //Task<IEnumerable<EmailMessage>> GetEmailsAsync(
+    //    string emailAccountId, 
+    //    EmailFilter filter, 
+    //    CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Retrieves emails from a Gmail account (optimized - avoids redundant DB fetch)
@@ -49,20 +50,28 @@ public interface IGmailClient
     /// <param name="emailAccountId">The email account ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if refresh was successful</returns>
+    //Task<bool> RefreshAccessTokenAsync(
+    //    string emailAccountId, 
+    //    CancellationToken cancellationToken = default);
+
     Task<bool> RefreshAccessTokenAsync(
-        string emailAccountId, 
+        EmailAccount emailAccount,
         CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Revokes access to a Gmail account
     /// </summary>
     /// <param name="emailAccountId">The email account ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if revocation was successful</returns>
-    Task<bool> RevokeAccessAsync(
-        string emailAccountId, 
-        CancellationToken cancellationToken = default);
+    //Task<bool> RevokeAccessAsync(
+    //    string emailAccountId, 
+    //    CancellationToken cancellationToken = default);
     
+    Task<bool> RevokeAccessAsync(
+        EmailAccount emailAccount,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Retrieves new emails since last scan using Gmail History API (incremental sync)
     /// </summary>
@@ -83,7 +92,7 @@ public interface IGmailClient
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of new email messages since last scan</returns>
     Task<IEnumerable<EmailMessage>> GetNewEmailsSinceLastScanAsync(
-        Domain.Entities.EmailAccount emailAccount,
+        EmailAccount emailAccount,
         EmailFilter filter,
         CancellationToken cancellationToken = default);
 }
