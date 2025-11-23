@@ -53,4 +53,18 @@ public interface IEmailQueueService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Number of pending emails</returns>
     Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Queues multiple emails for processing in a single batch (optimized for performance)
+    /// </summary>
+    /// <param name="emailAccountId">The email account ID</param>
+    /// <param name="emails">List of email messages to queue</param>
+    /// <param name="priority">Processing priority</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Count of emails successfully queued</returns>
+    Task<Result<int>> QueueEmailBatchAsync(
+        string emailAccountId,
+        List<EmailMessage> emails,
+        EmailProcessingPriority priority = EmailProcessingPriority.Normal,
+        CancellationToken cancellationToken = default);
 }

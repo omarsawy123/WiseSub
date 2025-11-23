@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
@@ -17,9 +18,21 @@ public class EmailQueueService : IEmailQueueService
     private readonly IEmailMetadataRepository _emailMetadataRepository;
 
     // Priority queues - higher priority processed first
-    private readonly ConcurrentQueue<QueuedEmail> _highPriorityQueue = new();
-    private readonly ConcurrentQueue<QueuedEmail> _normalPriorityQueue = new();
-    private readonly ConcurrentQueue<QueuedEmail> _lowPriorityQueue = new();
+    private readonly Channel<QueuedEmail> _highPriorityQueue = Channel.CreateBounded<QueuedEmail>(
+        new BoundedChannelOptions(5000)
+        {
+            FullMode = BoundedChannelFullMode.Wait
+        });
+    private readonly Channel<QueuedEmail> _normalPriorityQueue = Channel.CreateBounded<QueuedEmail>(
+        new BoundedChannelOptions(10000)
+        {
+            FullMode = BoundedChannelFullMode.Wait
+        });
+    private readonly Channel<QueuedEmail> _lowPriorityQueue = Channel.CreateBounded<QueuedEmail>(
+        new BoundedChannelOptions(5000)
+        {
+            FullMode = BoundedChannelFullMode.Wait
+        });
 
     // Track queued email IDs to prevent duplicates
     private readonly ConcurrentDictionary<string, bool> _queuedEmailIds = new();
@@ -82,7 +95,7 @@ public class EmailQueueService : IEmailQueueService
 
         // Add to appropriate priority queue
         var queue = GetQueueForPriority(priority);
-        queue.Enqueue(queuedEmail);
+        await queue.Writer.WriteAsync(queuedEmail, cancellationToken);
         _queuedEmailIds.TryAdd(emailMetadata.Id, true);
 
         _logger.LogInformation(
@@ -98,10 +111,10 @@ public class EmailQueueService : IEmailQueueService
 
         var status = new QueueStatus
         {
-            HighPriorityCount = _highPriorityQueue.Count,
-            NormalPriorityCount = _normalPriorityQueue.Count,
-            LowPriorityCount = _lowPriorityQueue.Count,
-            PendingCount = _highPriorityQueue.Count + _normalPriorityQueue.Count + _lowPriorityQueue.Count,
+            HighPriorityCount = _highPriorityQueue.Reader.Count,
+            NormalPriorityCount = _normalPriorityQueue.Reader.Count,
+            LowPriorityCount = _lowPriorityQueue.Reader.Count,
+            PendingCount = _highPriorityQueue.Reader.Count + _normalPriorityQueue.Reader.Count + _lowPriorityQueue.Reader.Count,
             ProcessedCount = processedCount,
             Timestamp = DateTime.UtcNow
         };
@@ -113,28 +126,6 @@ public class EmailQueueService : IEmailQueueService
     {
         // Process in priority order: High -> Normal -> Low
         QueuedEmail? queuedEmail = null;
-
-        if (_highPriorityQueue.TryDequeue(out var highPriorityEmail))
-        {
-            queuedEmail = highPriorityEmail;
-        }
-        else if (_normalPriorityQueue.TryDequeue(out var normalPriorityEmail))
-        {
-            queuedEmail = normalPriorityEmail;
-        }
-        else if (_lowPriorityQueue.TryDequeue(out var lowPriorityEmail))
-        {
-            queuedEmail = lowPriorityEmail;
-        }
-
-        if (queuedEmail != null)
-        {
-            _queuedEmailIds.TryRemove(queuedEmail.EmailMetadataId, out _);
-            
-            _logger.LogDebug(
-                "Dequeued email {EmailMetadataId} with priority {Priority}",
-                queuedEmail.EmailMetadataId, queuedEmail.Priority);
-        }
 
         return Task.FromResult(queuedEmail);
     }
@@ -182,7 +173,81 @@ public class EmailQueueService : IEmailQueueService
         return status.PendingCount;
     }
 
-    private ConcurrentQueue<QueuedEmail> GetQueueForPriority(EmailProcessingPriority priority)
+    public async Task<Result<int>> QueueEmailBatchAsync(
+        string emailAccountId,
+        List<EmailMessage> emails,
+        EmailProcessingPriority priority = EmailProcessingPriority.Normal,
+        CancellationToken cancellationToken = default)
+    {
+        if (emails == null || !emails.Any())
+            return Result.Success(0);
+
+        _logger.LogInformation("Starting batch queue of {Count} emails for account {EmailAccountId}",
+            emails.Count, emailAccountId);
+
+        // Batch duplicate check - get all external IDs that already exist
+        var externalIds = emails.Select(e => e.Id).ToList();
+        var existingIds = await _emailMetadataRepository
+            .GetExistingExternalIdsAsync(externalIds, cancellationToken);
+
+        _logger.LogDebug("Found {ExistingCount} existing emails out of {TotalCount}",
+            existingIds.Count, emails.Count);
+
+        // Filter to only new emails
+        var newEmails = emails
+            .Where(e => !existingIds.Contains(e.Id))
+            .ToList();
+
+        if (!newEmails.Any())
+        {
+            _logger.LogInformation("No new emails to queue for account {EmailAccountId}", emailAccountId);
+            return Result.Success(0);
+        }
+
+        // Bulk create email metadata
+        var metadataList = newEmails.Select(email => new EmailMetadata
+        {
+            Id = Guid.NewGuid().ToString(),
+            EmailAccountId = emailAccountId,
+            ExternalEmailId = email.Id,
+            Sender = email.Sender,
+            Subject = email.Subject,
+            ReceivedAt = email.ReceivedAt,
+            IsProcessed = false,
+            ProcessedAt = null,
+            SubscriptionId = null
+        }).ToList();
+
+        // Bulk insert to database
+        await _emailMetadataRepository.BulkAddAsync(metadataList, cancellationToken);
+
+        var newEmailsDict = newEmails.ToDictionary(e => e.Id, e => e);
+
+        // Add to in-memory priority queue
+        var queue = GetQueueForPriority(priority);
+        foreach (var metadata in metadataList)
+        {
+            var queuedEmail = new QueuedEmail
+            {
+                EmailMetadataId = metadata.Id,
+                EmailAccountId = emailAccountId,
+                Email = newEmailsDict[metadata.ExternalEmailId],
+                Priority = priority,
+                QueuedAt = DateTime.UtcNow
+            };
+
+            await queue.Writer.WriteAsync(queuedEmail, cancellationToken);
+            _queuedEmailIds.TryAdd(metadata.Id, true);
+        }
+
+        _logger.LogInformation(
+            "Successfully queued {QueuedCount} new emails with priority {Priority} for account {EmailAccountId}",
+            newEmails.Count, priority, emailAccountId);
+
+        return Result.Success(newEmails.Count);
+    }
+
+    private Channel<QueuedEmail> GetQueueForPriority(EmailProcessingPriority priority)
     {
         return priority switch
         {

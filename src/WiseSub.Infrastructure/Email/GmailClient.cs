@@ -190,26 +190,29 @@ public class GmailClient : IGmailClient
             return messages;
         }
 
-        // Retrieve full message details (in batches to respect rate limits)
-        var batchSize = 50;
+        // Retrieve message details (in batches to respect rate limits)
+        // Optimized: Increased batch size to 100 and using METADATA format for faster retrieval
+        var batchSize = 100;
         for (int i = 0; i < response.Messages.Count; i += batchSize)
         {
             var batch = response.Messages.Skip(i).Take(batchSize);
             var batchTasks = batch.Select(async msg =>
             {
                 var messageRequest = service.Users.Messages.Get("me", msg.Id);
-                messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
-                var fullMessage = await messageRequest.ExecuteAsync(cancellationToken);
-                return ParseGmailMessage(fullMessage);
+                // Use METADATA format with specific headers for better performance
+                messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Metadata;
+                messageRequest.MetadataHeaders = new Google.Apis.Util.Repeatable<string>(new[] { "From", "Subject", "Date" });
+                var message = await messageRequest.ExecuteAsync(cancellationToken);
+                return ParseGmailMessage(message);
             });
 
             var batchResults = await Task.WhenAll(batchTasks);
             messages.AddRange(batchResults.Where(m => m != null)!);
 
-            // Rate limiting: small delay between batches
+            // Rate limiting: reduced delay for better performance
             if (i + batchSize < response.Messages.Count)
             {
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(50, cancellationToken);
             }
         }
 
@@ -624,8 +627,9 @@ public class GmailClient : IGmailClient
                 _logger.LogInformation("Found {Count} new messages from history for account {EmailAccountId}",
                     newMessageIds.Count, emailAccount.Id);
 
-                // Retrieve full message details for new messages (in batches)
-                var batchSize = 50;
+                // Retrieve message details for new messages (in batches)
+                // Optimized: Increased batch size to 100 and using METADATA format
+                var batchSize = 100;
                 var messageIdList = newMessageIds.ToList();
                 
                 for (int i = 0; i < messageIdList.Count; i += batchSize)
@@ -634,11 +638,13 @@ public class GmailClient : IGmailClient
                     var batchTasks = batch.Select(async msgId =>
                     {
                         var messageRequest = service.Users.Messages.Get("me", msgId);
-                        messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
-                        var fullMessage = await messageRequest.ExecuteAsync(cancellationToken);
+                        // Use METADATA format with specific headers for better performance
+                        messageRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Metadata;
+                        messageRequest.MetadataHeaders = new Google.Apis.Util.Repeatable<string>(new[] { "From", "Subject", "Date" });
+                        var message = await messageRequest.ExecuteAsync(cancellationToken);
                         
                         // Apply filter criteria
-                        var parsedMessage = ParseGmailMessage(fullMessage);
+                        var parsedMessage = ParseGmailMessage(message);
                         if (MatchesFilter(parsedMessage, filter))
                         {
                             return parsedMessage;
@@ -649,10 +655,10 @@ public class GmailClient : IGmailClient
                     var batchResults = await Task.WhenAll(batchTasks);
                     messages.AddRange(batchResults.Where(m => m != null)!);
 
-                    // Rate limiting: small delay between batches
+                    // Rate limiting: reduced delay for better performance
                     if (i + batchSize < messageIdList.Count)
                     {
-                        await Task.Delay(100, cancellationToken);
+                        await Task.Delay(50, cancellationToken);
                     }
                 }
 

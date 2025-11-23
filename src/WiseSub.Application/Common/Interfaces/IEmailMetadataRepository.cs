@@ -37,4 +37,24 @@ public interface IEmailMetadataRepository : IRepository<EmailMetadata>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Count of unprocessed emails</returns>
     Task<int> GetUnprocessedCountAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bulk adds multiple email metadata records in a single transaction
+    /// </summary>
+    /// <param name="emailMetadataList">List of email metadata to add</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Task</returns>
+    Task BulkAddAsync(
+        List<EmailMetadata> emailMetadataList,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets existing external email IDs from a list of IDs (batch duplicate check)
+    /// </summary>
+    /// <param name="externalIds">List of external email IDs to check</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>HashSet of existing external email IDs</returns>
+    Task<HashSet<string>> GetExistingExternalIdsAsync(
+        List<string> externalIds,
+        CancellationToken cancellationToken = default);
 }

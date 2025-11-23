@@ -90,20 +90,22 @@ public class EmailIngestionService : IEmailIngestionService
         _logger.LogInformation("Retrieved {Count} emails for account {EmailAccountId}",
             emailList.Count, emailAccount.Id);
 
-        // Queue emails for AI processing with high priority (new subscriptions)
-        var queuedCount = 0;
-        foreach (var email in emailList)
+        // Use bulk queue method for better performance
+        var queueResult = await _emailQueueService.QueueEmailBatchAsync(
+            emailAccount.Id,
+            emailList,
+            EmailProcessingPriority.High, // High priority for initial scan
+            cancellationToken);
+
+        if (!queueResult.IsSuccess)
         {
-            await _emailQueueService.QueueEmailForProcessingAsync(
-                emailAccount.Id,
-                email,
-                EmailProcessingPriority.High, // High priority for initial scan
-                cancellationToken);
-            queuedCount++;
+            _logger.LogWarning("Failed to queue emails for account {EmailAccountId}: {Error}",
+                emailAccount.Id, queueResult.ErrorMessage);
+            return Result.Failure<int>(EmailMetadataErrors.QueueFailed);
         }
 
         _logger.LogInformation("Queued {QueuedCount} out of {TotalCount} emails for processing",
-            queuedCount, emailList.Count);
+            queueResult.Value, emailList.Count);
 
         return Result.Success(emailList.Count);
     }
@@ -127,27 +129,35 @@ public class EmailIngestionService : IEmailIngestionService
         _logger.LogInformation("Found {Count} active email accounts for user {UserId}",
             accountList.Count, userId);
 
-        // Scan each account
-        var totalEmails = 0;
-        foreach (var account in accountList)
+        // Scan each account in parallel for better performance
+        var scanTasks = accountList.Select(async account =>
         {
-            var scanResult = await ScanEmailAccountAsync(account, null, cancellationToken);
-            if (scanResult.IsSuccess)
+            try
             {
-                totalEmails += scanResult.Value;
+                var scanResult = await ScanEmailAccountAsync(account, null, cancellationToken);
+                if (scanResult.IsSuccess)
+                {
+                    _logger.LogInformation("Successfully scanned account {AccountId}: {Count} emails",
+                        account.Id, scanResult.Value);
+                    return scanResult.Value;
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to scan account {AccountId}: {Error}",
+                        account.Id, scanResult.ErrorMessage);
+                    return 0;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogWarning("Failed to scan account {AccountId}: {Error}", 
-                    account.Id, scanResult.ErrorMessage);
+                _logger.LogError(ex, "Exception scanning account {AccountId}", account.Id);
+                return 0;
             }
+        });
 
-            // Small delay between accounts to avoid rate limiting
-            if (accountList.Count > 1)
-            {
-                await Task.Delay(1000, cancellationToken);
-            }
-        }
+        // Wait for all scans to complete
+        var results = await Task.WhenAll(scanTasks);
+        var totalEmails = results.Sum();
 
         _logger.LogInformation("Completed email scan for user {UserId}. Total emails: {TotalEmails}",
             userId, totalEmails);

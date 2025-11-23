@@ -42,4 +42,30 @@ public class EmailMetadataRepository : Repository<EmailMetadata>, IEmailMetadata
         return await _context.EmailMetadata
             .CountAsync(em => !em.IsProcessed, cancellationToken);
     }
+
+    public async Task BulkAddAsync(
+        List<EmailMetadata> emailMetadataList,
+        CancellationToken cancellationToken = default)
+    {
+        if (emailMetadataList == null || !emailMetadataList.Any())
+            return;
+
+        await _context.EmailMetadata.AddRangeAsync(emailMetadataList, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<HashSet<string>> GetExistingExternalIdsAsync(
+        List<string> externalIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (externalIds == null || !externalIds.Any())
+            return new HashSet<string>();
+
+        var existingIds = await _context.EmailMetadata
+            .Where(em => externalIds.Contains(em.ExternalEmailId))
+            .Select(em => em.ExternalEmailId)
+            .ToListAsync(cancellationToken);
+
+        return existingIds.ToHashSet();
+    }
 }

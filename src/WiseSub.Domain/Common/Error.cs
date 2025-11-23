@@ -65,6 +65,7 @@
         public static readonly Error AlreadyProcessed = new Error("EmailMetadata.AlreadyProcessed", "This email has already been processed.");
         public static readonly Error ProcessingFailed = new Error("EmailMetadata.ProcessingFailed", "Failed to process the email.");
         public static readonly Error InvalidFormat = new Error("EmailMetadata.InvalidFormat", "The email format is invalid.");
+        public static readonly Error QueueFailed = new Error("EmailMetadata.QueueFailed", "Failed to queue emails for processing.");
     }
 
     public static class ValidationErrors
