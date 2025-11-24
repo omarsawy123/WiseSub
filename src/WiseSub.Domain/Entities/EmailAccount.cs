@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using WiseSub.Domain.Enums;
 
 namespace WiseSub.Domain.Entities;
@@ -14,7 +15,19 @@ public class EmailAccount
     public DateTime LastScanAt { get; set; }
     public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
     public bool IsActive { get; set; } = true;
-    public string? GmailHistoryId { get; set; } // For incremental sync using Gmail History API
+    
+    /// <summary>
+    /// Generic provider sync metadata for incremental sync support
+    /// Key examples: "gmail_history_id", "outlook_delta_token", etc.
+    /// </summary>
+    [NotMapped] // Will be serialized to JSON column in database migration
+    public Dictionary<string, string> ProviderSyncMetadata { get; set; } = new();
+    
+    /// <summary>
+    /// Legacy Gmail-specific history ID. Use ProviderSyncMetadata instead.
+    /// </summary>
+    [Obsolete("Use ProviderSyncMetadata with key 'gmail_history_id' instead")]
+    public string? GmailHistoryId { get; set; }
     
     // Navigation properties
     public User User { get; set; } = null!;

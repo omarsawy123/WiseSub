@@ -4,6 +4,9 @@ using WiseSub.Application.Services;
 
 namespace WiseSub.Application;
 
+/// <summary>
+/// Dependency injection configuration for application layer
+/// </summary>
 public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
@@ -11,6 +14,7 @@ public static class DependencyInjection
         // Register application services
         services.AddScoped<IHealthService, HealthService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IEmailMetadataService, EmailMetadataService>();
 
         return services;
     }

@@ -1,5 +1,6 @@
 using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Common;
+using WiseSub.Domain.Entities;
 
 namespace WiseSub.Application.Common.Interfaces;
 
@@ -11,13 +12,13 @@ public interface IEmailQueueService
     /// <summary>
     /// Queues an email for AI processing
     /// </summary>
-    /// <param name="emailAccountId">The email account ID</param>
+    /// <param name="emailMetadata">The email metadata</param>
     /// <param name="email">The email message to queue</param>
     /// <param name="priority">Processing priority</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The queued email metadata ID</returns>
-    Task<Result<string>> QueueEmailForProcessingAsync(
-        string emailAccountId,
+    /// <returns>Success result</returns>
+    Task<Result> QueueEmailForProcessingAsync(
+        EmailMetadata emailMetadata,
         EmailMessage email,
         EmailProcessingPriority priority = EmailProcessingPriority.Normal,
         CancellationToken cancellationToken = default);
@@ -37,17 +38,6 @@ public interface IEmailQueueService
     Task<QueuedEmail?> DequeueNextEmailAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Marks an email as processed
-    /// </summary>
-    /// <param name="emailMetadataId">The email metadata ID</param>
-    /// <param name="subscriptionId">The subscription ID if one was created</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task<Result> MarkAsProcessedAsync(
-        string emailMetadataId,
-        string? subscriptionId = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Gets the count of pending emails in the queue
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -57,14 +47,14 @@ public interface IEmailQueueService
     /// <summary>
     /// Queues multiple emails for processing in a single batch (optimized for performance)
     /// </summary>
-    /// <param name="emailAccountId">The email account ID</param>
-    /// <param name="emails">List of email messages to queue</param>
+    /// <param name="emailMetadataList">List of email metadata</param>
+    /// <param name="emailsDict">Dictionary mapping external email ID to email message</param>
     /// <param name="priority">Processing priority</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Count of emails successfully queued</returns>
     Task<Result<int>> QueueEmailBatchAsync(
-        string emailAccountId,
-        List<EmailMessage> emails,
+        List<EmailMetadata> emailMetadataList,
+        Dictionary<string, EmailMessage> emailsDict,
         EmailProcessingPriority priority = EmailProcessingPriority.Normal,
         CancellationToken cancellationToken = default);
 }

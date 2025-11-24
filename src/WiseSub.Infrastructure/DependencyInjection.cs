@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using WiseSub.Application.Common.Configuration;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Infrastructure.AI;
 using WiseSub.Infrastructure.Authentication;
@@ -17,6 +18,10 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        // Configure email scan settings
+        services.Configure<EmailScanConfiguration>(
+            configuration.GetSection(EmailScanConfiguration.SectionName));
+
         // Configure Entity Framework Core with SQLite
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? "Data Source=subscriptiontracker.db";
@@ -53,6 +58,8 @@ public static class DependencyInjection
 
         // Register email services
         services.AddScoped<IGmailClient, GmailClient>();
+        services.AddScoped<IEmailProviderClient, GmailClient>(); // Register as provider client too
+        services.AddSingleton<IEmailProviderFactory, EmailProviderFactory>();
         services.AddScoped<IEmailIngestionService, EmailIngestionService>();
         services.AddSingleton<IEmailQueueService, EmailQueueService>();
 

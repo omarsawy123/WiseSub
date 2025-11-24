@@ -6,6 +6,7 @@ using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using WiseSub.Application.Common.Extensions;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Entities;
@@ -19,7 +20,7 @@ namespace WiseSub.Infrastructure.Email;
 /// <summary>
 /// Gmail API client implementation
 /// </summary>
-public class GmailClient : IGmailClient
+public class GmailClient : IGmailClient, IEmailProviderClient
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<GmailClient> _logger;
@@ -564,10 +565,11 @@ public class GmailClient : IGmailClient
     {
         _logger.LogInformation("Retrieving new emails since last scan for account {EmailAccountId}", emailAccount.Id);
 
-        // If no historyId exists, fall back to full scan
-        if (string.IsNullOrEmpty(emailAccount.GmailHistoryId))
+        // If no sync token exists, fall back to full scan
+        var syncToken = emailAccount.GetProviderSyncToken();
+        if (string.IsNullOrEmpty(syncToken))
         {
-            _logger.LogInformation("No historyId found for account {EmailAccountId}, performing full scan", emailAccount.Id);
+            _logger.LogInformation("No sync token found for account {EmailAccountId}, performing full scan", emailAccount.Id);
             return await GetEmailsAsync(emailAccount, filter, cancellationToken);
         }
 
@@ -597,7 +599,7 @@ public class GmailClient : IGmailClient
 
         // Use Gmail History API to get changes since last historyId
         var historyRequest = service.Users.History.List("me");
-        historyRequest.StartHistoryId = ulong.Parse(emailAccount.GmailHistoryId!);
+        historyRequest.StartHistoryId = ulong.Parse(syncToken!);
         historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
 
         var messages = new List<EmailMessage>();
@@ -682,10 +684,11 @@ public class GmailClient : IGmailClient
         catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
         {
             // HistoryId is too old or invalid, fall back to full scan
-            _logger.LogWarning("HistoryId {HistoryId} is invalid or too old for account {EmailAccountId}, performing full scan",
-                emailAccount.GmailHistoryId, emailAccount.Id);
+            _logger.LogWarning("Sync token {SyncToken} is invalid or too old for account {EmailAccountId}, performing full scan",
+                syncToken, emailAccount.Id);
             
-            // Clear the invalid historyId
+            // Clear the invalid sync token
+            emailAccount.SetProviderSyncToken(null);
             await _emailAccountRepository.UpdateHistoryIdAsync(emailAccount.Id, null!, cancellationToken);
             
             // Perform full scan
@@ -740,6 +743,11 @@ public class GmailClient : IGmailClient
         }
 
         return true;
+    }
+
+    public bool SupportsProvider(EmailProvider provider)
+    {
+        return provider == EmailProvider.Gmail;
     }
 
     private class TokenResponse

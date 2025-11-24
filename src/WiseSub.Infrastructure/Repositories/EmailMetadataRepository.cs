@@ -54,7 +54,7 @@ public class EmailMetadataRepository : Repository<EmailMetadata>, IEmailMetadata
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<HashSet<string>> GetExistingExternalIdsAsync(
+    public async Task<HashSet<string>> GetExistingExternalProcessedIdsAsync(
         List<string> externalIds,
         CancellationToken cancellationToken = default)
     {
@@ -62,7 +62,7 @@ public class EmailMetadataRepository : Repository<EmailMetadata>, IEmailMetadata
             return new HashSet<string>();
 
         var existingIds = await _context.EmailMetadata
-            .Where(em => externalIds.Contains(em.ExternalEmailId))
+            .Where(em => externalIds.Contains(em.ExternalEmailId) && em.IsProcessed)
             .Select(em => em.ExternalEmailId)
             .ToListAsync(cancellationToken);
 

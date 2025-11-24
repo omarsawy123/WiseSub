@@ -54,7 +54,7 @@ public interface IEmailMetadataRepository : IRepository<EmailMetadata>
     /// <param name="externalIds">List of external email IDs to check</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>HashSet of existing external email IDs</returns>
-    Task<HashSet<string>> GetExistingExternalIdsAsync(
+    Task<HashSet<string>> GetExistingExternalProcessedIdsAsync(
         List<string> externalIds,
         CancellationToken cancellationToken = default);
 }

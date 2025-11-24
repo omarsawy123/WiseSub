@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using WiseSub.Application.Common.Configuration;
+using WiseSub.Application.Common.Extensions;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Common;
@@ -14,27 +17,25 @@ public class EmailIngestionService : IEmailIngestionService
 {
     private readonly ILogger<EmailIngestionService> _logger;
     private readonly IEmailAccountRepository _emailAccountRepository;
-    private readonly IGmailClient _gmailClient;
+    private readonly IEmailProviderFactory _providerFactory;
     private readonly IEmailQueueService _emailQueueService;
-
-    // Default subscription-related keywords for filtering
-    private static readonly List<string> DefaultSubjectKeywords = new()
-    {
-        "subscription", "renewal", "invoice", "receipt", "payment",
-        "billing", "charge", "trial", "upgrade", "membership",
-        "plan", "premium", "pro", "plus"
-    };
+    private readonly IEmailMetadataService _emailMetadataService;
+    private readonly EmailScanConfiguration _config;
 
     public EmailIngestionService(
         ILogger<EmailIngestionService> logger,
         IEmailAccountRepository emailAccountRepository,
-        IGmailClient gmailClient,
-        IEmailQueueService emailQueueService)
+        IEmailProviderFactory providerFactory,
+        IEmailQueueService emailQueueService,
+        IEmailMetadataService emailMetadataService,
+        IOptions<EmailScanConfiguration> config)
     {
         _logger = logger;
         _emailAccountRepository = emailAccountRepository;
-        _gmailClient = gmailClient;
+        _providerFactory = providerFactory;
         _emailQueueService = emailQueueService;
+        _emailMetadataService = emailMetadataService;
+        _config = config.Value;
     }
 
     public async Task<Result<int>> ScanEmailAccountAsync(
@@ -53,48 +54,68 @@ public class EmailIngestionService : IEmailIngestionService
             return Result.Failure<int>(EmailAccountErrors.ConnectionFailed);
         }
 
-        // Default to 12 months ago if not specified
-        var scanSince = since ?? DateTime.UtcNow.AddMonths(-12);
+        // Default to configured lookback if not specified
+        var scanSince = since ?? DateTime.UtcNow.AddMonths(-_config.DefaultLookbackMonths);
 
         // Create email filter
         var filter = new EmailFilter
         {
             Since = scanSince,
-            SubjectKeywords = DefaultSubjectKeywords,
-            MaxResults = 500 // Limit to 500 emails per scan
+            SubjectKeywords = _config.SubjectKeywords,
+            MaxResults = _config.MaxEmailsPerScan
         };
 
-        // Retrieve emails based on provider
-        IEnumerable<EmailMessage> emails;
-        if (emailAccount.Provider == EmailProvider.Gmail)
+        // Get provider client for the account
+        IEmailProviderClient provider;
+        try
         {
-            // Use incremental sync if this is not the first scan
-            if (emailAccount.LastScanAt > DateTime.MinValue && !string.IsNullOrEmpty(emailAccount.GmailHistoryId))
-            {
-                _logger.LogInformation("Using incremental sync for account {EmailAccountId}", emailAccount.Id);
-                emails = await _gmailClient.GetNewEmailsSinceLastScanAsync(emailAccount, filter, cancellationToken);
-            }
-            else
-            {
-                _logger.LogInformation("Performing full scan for account {EmailAccountId}", emailAccount.Id);
-                emails = await _gmailClient.GetEmailsAsync(emailAccount, filter, cancellationToken);
-            }
+            provider = _providerFactory.GetProvider(emailAccount.Provider);
         }
-        else
+        catch (NotSupportedException ex)
         {
-            _logger.LogWarning("Email provider {Provider} not yet supported", emailAccount.Provider);
+            _logger.LogWarning("Email provider {Provider} not supported: {Error}",
+                emailAccount.Provider, ex.Message);
             return Result.Failure<int>(EmailAccountErrors.InvalidProvider);
         }
 
-        var emailList = emails.ToList();
-        _logger.LogInformation("Retrieved {Count} emails for account {EmailAccountId}",
-            emailList.Count, emailAccount.Id);
+        // Use incremental sync if supported
+        IEnumerable<EmailMessage> emails;
+        if (emailAccount.SupportsIncrementalSync())
+        {
+            _logger.LogInformation("Using incremental sync for account {EmailAccountId}", emailAccount.Id);
+            emails = await provider.GetNewEmailsSinceLastScanAsync(emailAccount, filter, cancellationToken);
+        }
+        else
+        {
+            emails = await provider.GetEmailsAsync(emailAccount, filter, cancellationToken);
+        }
 
-        // Use bulk queue method for better performance
-        var queueResult = await _emailQueueService.QueueEmailBatchAsync(
+        var emailList = emails.ToList();
+
+        if (!emailList.Any())
+        {
+            return Result.Success(0);
+        }
+
+        // Step 1: Create email metadata with duplicate detection
+        var metadataResult = await _emailMetadataService.CreateEmailMetadataBatchAsync(
             emailAccount.Id,
             emailList,
-            EmailProcessingPriority.High, // High priority for initial scan
+            cancellationToken);
+
+        if (!metadataResult.IsSuccess || !metadataResult.Value.Any())
+        {
+            return Result.Success(emailList.Count);
+        }
+
+        var metadataList = metadataResult.Value;
+
+        // Step 2: Queue emails for processing
+        var emailsDict = emailList.ToDictionary(e => e.Id, e => e);
+        var queueResult = await _emailQueueService.QueueEmailBatchAsync(
+            metadataList,
+            emailsDict,
+            EmailProcessingPriority.High,
             cancellationToken);
 
         if (!queueResult.IsSuccess)
@@ -104,8 +125,8 @@ public class EmailIngestionService : IEmailIngestionService
             return Result.Failure<int>(EmailMetadataErrors.QueueFailed);
         }
 
-        _logger.LogInformation("Queued {QueuedCount} out of {TotalCount} emails for processing",
-            queueResult.Value, emailList.Count);
+        _logger.LogInformation("Scanned account {EmailAccountId}: {QueuedCount} new emails queued",
+            emailAccount.Id, queueResult.Value);
 
         return Result.Success(emailList.Count);
     }
