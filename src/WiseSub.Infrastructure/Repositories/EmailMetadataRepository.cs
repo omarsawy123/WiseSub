@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Domain.Entities;
+using WiseSub.Domain.Enums;
 using WiseSub.Infrastructure.Data;
 
 namespace WiseSub.Infrastructure.Repositories;
@@ -18,7 +19,7 @@ public class EmailMetadataRepository : Repository<EmailMetadata>, IEmailMetadata
         CancellationToken cancellationToken = default)
     {
         return await _context.EmailMetadata
-            .Where(em => !em.IsProcessed)
+            .Where(em => em.Status != EmailProcessingStatus.Completed)
             .OrderBy(em => em.ReceivedAt)
             .ToListAsync(cancellationToken);
     }
@@ -34,13 +35,13 @@ public class EmailMetadataRepository : Repository<EmailMetadata>, IEmailMetadata
     public async Task<int> GetProcessedCountAsync(CancellationToken cancellationToken = default)
     {
         return await _context.EmailMetadata
-            .CountAsync(em => em.IsProcessed, cancellationToken);
+            .CountAsync(em => em.Status == EmailProcessingStatus.Completed, cancellationToken);
     }
 
     public async Task<int> GetUnprocessedCountAsync(CancellationToken cancellationToken = default)
     {
         return await _context.EmailMetadata
-            .CountAsync(em => !em.IsProcessed, cancellationToken);
+            .CountAsync(em => em.Status != EmailProcessingStatus.Completed, cancellationToken);
     }
 
     public async Task BulkAddAsync(
@@ -62,10 +63,28 @@ public class EmailMetadataRepository : Repository<EmailMetadata>, IEmailMetadata
             return new HashSet<string>();
 
         var existingIds = await _context.EmailMetadata
-            .Where(em => externalIds.Contains(em.ExternalEmailId) && em.IsProcessed)
+            .Where(em => externalIds.Contains(em.ExternalEmailId) && 
+                         em.Status == EmailProcessingStatus.Completed)
             .Select(em => em.ExternalEmailId)
             .ToListAsync(cancellationToken);
 
         return existingIds.ToHashSet();
+    }
+
+    public async Task<List<EmailMetadata>> GetUnprocessedByExternalIdsAsync(
+        List<string> externalIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (externalIds == null || !externalIds.Any())
+            return new List<EmailMetadata>();
+
+        // Optimized query: Returns ONLY unprocessed emails
+        // Filters: NOT Completed AND NOT Processing
+        // Returns: Pending, Queued, Failed
+        return await _context.EmailMetadata
+            .Where(em => externalIds.Contains(em.ExternalEmailId))
+            .Where(em => em.Status != EmailProcessingStatus.Completed && 
+                         em.Status != EmailProcessingStatus.Processing)
+            .ToListAsync(cancellationToken);
     }
 }

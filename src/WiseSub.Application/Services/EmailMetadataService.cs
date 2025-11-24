@@ -3,6 +3,7 @@ using WiseSub.Application.Common.Interfaces;
 using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
+using WiseSub.Domain.Enums;
 
 namespace WiseSub.Application.Services;
 
@@ -56,34 +57,39 @@ public class EmailMetadataService : IEmailMetadataService
         if (emails == null || !emails.Any())
             return Result.Success(new List<EmailMetadata>());
 
-        // Batch duplicate check - get all external IDs that already exist
         var externalIds = emails.Select(e => e.Id).ToList();
-        var existingIds = await _emailMetadataRepository
-            .GetExistingExternalProcessedIdsAsync(externalIds, cancellationToken);
-
-        // Filter to only new emails
-        var newEmails = emails
-            .Where(e => !existingIds.Contains(e.Id))
+        
+        // STEP 1: Single optimized query
+        // Returns: Pending, Queued, Failed emails (NOT Completed, NOT Processing)
+        var existingUnprocessed = await _emailMetadataRepository
+            .GetUnprocessedByExternalIdsAsync(externalIds, cancellationToken);
+        
+        // STEP 2: In-memory separation
+        var existingDict = existingUnprocessed.ToDictionary(m => m.ExternalEmailId);
+        
+        // Truly new emails = not in existingDict
+        var trulyNew = emails
+            .Where(e => !existingDict.ContainsKey(e.Id))
             .ToList();
-
-        if (!newEmails.Any())
-        {
-            return Result.Success(new List<EmailMetadata>());
-        }
-
-        // Bulk create email metadata
-        var metadataList = newEmails
+        
+        // STEP 3: Create metadata for new emails
+        var newMetadata = trulyNew
             .Select(email => MapToEmailMetadata(emailAccountId, email))
             .ToList();
-
-        // Bulk insert to database
-        await _emailMetadataRepository.BulkAddAsync(metadataList, cancellationToken);
-
+        
+        if (newMetadata.Any())
+        {
+            await _emailMetadataRepository.BulkAddAsync(newMetadata, cancellationToken);
+        }
+        
+        // STEP 4: Return BOTH new + existing unprocessed for queueing
+        var allToQueue = newMetadata.Concat(existingUnprocessed).ToList();
+        
         _logger.LogInformation(
-            "Created {NewCount} email metadata records out of {TotalCount} emails",
-            newEmails.Count, emails.Count);
-
-        return Result.Success(metadataList);
+            "Prepared {Total} emails for queue: {New} new, {Existing} unprocessed",
+            allToQueue.Count, newMetadata.Count, existingUnprocessed.Count);
+        
+        return Result.Success(allToQueue);
     }
 
     public async Task<Result> MarkAsProcessedAsync(
@@ -102,7 +108,7 @@ public class EmailMetadataService : IEmailMetadataService
             return Result.Failure(EmailMetadataErrors.NotFound);
         }
 
-        if (emailMetadata.IsProcessed)
+        if (emailMetadata.Status == EmailProcessingStatus.Completed)
         {
             _logger.LogWarning(
                 "Email metadata {EmailMetadataId} is already processed",
@@ -110,7 +116,7 @@ public class EmailMetadataService : IEmailMetadataService
             return Result.Failure(EmailMetadataErrors.AlreadyProcessed);
         }
 
-        emailMetadata.IsProcessed = true;
+        emailMetadata.Status = EmailProcessingStatus.Completed;
         emailMetadata.ProcessedAt = DateTime.UtcNow;
         emailMetadata.SubscriptionId = subscriptionId;
 
@@ -132,7 +138,7 @@ public class EmailMetadataService : IEmailMetadataService
             Sender = email.Sender,
             Subject = email.Subject,
             ReceivedAt = email.ReceivedAt,
-            IsProcessed = false,
+            Status = EmailProcessingStatus.Pending,  // Initial status
             ProcessedAt = null,
             SubscriptionId = null
         };

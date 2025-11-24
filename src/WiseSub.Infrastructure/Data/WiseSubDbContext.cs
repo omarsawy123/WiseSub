@@ -120,8 +120,8 @@ public class WiseSubDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.EmailAccountId);
             entity.HasIndex(e => e.ExternalEmailId);
-            entity.HasIndex(e => new { e.IsProcessed, e.ProcessedAt });
-            entity.HasIndex(e => new { e.EmailAccountId, e.IsProcessed });
+            entity.HasIndex(e => new { e.Status, e.ProcessedAt });
+            entity.HasIndex(e => new { e.EmailAccountId, e.Status });
             entity.Property(e => e.Sender).IsRequired();
             entity.Property(e => e.Subject).IsRequired();
 

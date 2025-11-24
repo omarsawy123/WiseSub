@@ -57,4 +57,15 @@ public interface IEmailMetadataRepository : IRepository<EmailMetadata>
     Task<HashSet<string>> GetExistingExternalProcessedIdsAsync(
         List<string> externalIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets unprocessed emails by external IDs for re-queueing after restart
+    /// Returns emails with Status NOT Completed and NOT Processing
+    /// </summary>
+    /// <param name="externalIds">List of external email IDs to check</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of unprocessed email metadata</returns>
+    Task<List<EmailMetadata>> GetUnprocessedByExternalIdsAsync(
+        List<string> externalIds,
+        CancellationToken cancellationToken = default);
 }
