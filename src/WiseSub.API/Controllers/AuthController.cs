@@ -1,11 +1,14 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using WiseSub.Application.Common.Interfaces;
 
 namespace WiseSub.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting("auth")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthenticationService _authenticationService;
@@ -114,11 +117,15 @@ public class AuthController : ControllerBase
 
 public class GoogleAuthRequest
 {
+    [Required(ErrorMessage = "Authorization code is required")]
+    [MinLength(10, ErrorMessage = "Authorization code is too short")]
     public string AuthorizationCode { get; set; } = string.Empty;
 }
 
 public class RefreshTokenRequest
 {
+    [Required(ErrorMessage = "Refresh token is required")]
+    [MinLength(10, ErrorMessage = "Refresh token is too short")]
     public string RefreshToken { get; set; } = string.Empty;
 }
 

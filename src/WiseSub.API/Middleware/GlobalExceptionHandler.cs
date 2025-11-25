@@ -19,14 +19,17 @@ namespace WiseSub.API.Middleware;
 /// - Programming errors (null reference, index out of range, etc.)
 /// 
 /// Returns appropriate HTTP responses based on exception type with detailed logging.
+/// In production, exception details are hidden to prevent information disclosure.
 /// </summary>
 public class GlobalExceptionHandler : IExceptionHandler
 {
     private readonly ILogger<GlobalExceptionHandler> _logger;
+    private readonly IHostEnvironment _environment;
 
-    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, IHostEnvironment environment)
     {
         _logger = logger;
+        _environment = environment;
     }
 
     public async ValueTask<bool> TryHandleAsync(
@@ -57,13 +60,21 @@ public class GlobalExceptionHandler : IExceptionHandler
         {
             Status = statusCode,
             Title = title,
-            Detail = exception.Message,
             Instance = httpContext.Request.Path,
             Type = $"https://httpstatuses.io/{statusCode}"
         };
 
-        // Add exception type for debugging
-        problemDetails.Extensions["exceptionType"] = exception.GetType().Name;
+        // Only expose exception details in development to prevent information disclosure
+        if (_environment.IsDevelopment())
+        {
+            problemDetails.Detail = exception.Message;
+            problemDetails.Extensions["exceptionType"] = exception.GetType().Name;
+            problemDetails.Extensions["stackTrace"] = exception.StackTrace;
+        }
+        else
+        {
+            problemDetails.Detail = "An unexpected error occurred. Please try again later.";
+        }
 
         return problemDetails;
     }
