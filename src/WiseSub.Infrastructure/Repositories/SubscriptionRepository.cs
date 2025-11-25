@@ -77,20 +77,24 @@ public class SubscriptionRepository : Repository<Subscription>, ISubscriptionRep
 
     public async Task<decimal> GetTotalMonthlySpendingAsync(string userId, CancellationToken cancellationToken = default)
     {
-        var subscriptions = await _dbSet
+        // Use projection to only load required fields - avoids N+1 query
+        var data = await _dbSet
             .Where(s => s.UserId == userId && s.Status == SubscriptionStatus.Active)
+            .Select(s => new { s.Price, s.BillingCycle })
             .ToListAsync(cancellationToken);
 
-        return subscriptions.Sum(s => NormalizeToMonthly(s.Price, s.BillingCycle));
+        return data.Sum(s => NormalizeToMonthly(s.Price, s.BillingCycle));
     }
 
     public async Task<Dictionary<string, decimal>> GetSpendingByCategoryAsync(string userId, CancellationToken cancellationToken = default)
     {
-        var subscriptions = await _dbSet
+        // Use projection to only load required fields - avoids N+1 query
+        var data = await _dbSet
             .Where(s => s.UserId == userId && s.Status == SubscriptionStatus.Active)
+            .Select(s => new { s.Price, s.BillingCycle, s.Category })
             .ToListAsync(cancellationToken);
 
-        return subscriptions
+        return data
             .GroupBy(s => string.IsNullOrEmpty(s.Category) ? "Uncategorized" : s.Category)
             .ToDictionary(
                 g => g.Key,

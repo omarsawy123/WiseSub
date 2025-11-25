@@ -171,17 +171,25 @@ public class GoogleAuthenticationService : IAuthenticationService
 
     public async Task<bool> RevokeTokenAsync(string refreshToken)
     {
-        var requestData = new Dictionary<string, string>
+        try
         {
-            { "token", refreshToken }
-        };
+            var requestData = new Dictionary<string, string>
+            {
+                { "token", refreshToken }
+            };
 
-        var response = await _httpClient.PostAsync(
-            "https://oauth2.googleapis.com/revoke",
-            new FormUrlEncodedContent(requestData)
-        );
+            var response = await _httpClient.PostAsync(
+                "https://oauth2.googleapis.com/revoke",
+                new FormUrlEncodedContent(requestData)
+            );
 
-        return response.IsSuccessStatusCode;
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception)
+        {
+            // Return false on any error (network failures, etc.)
+            return false;
+        }
     }
 
     public string GenerateJwtToken(string userId, string email)

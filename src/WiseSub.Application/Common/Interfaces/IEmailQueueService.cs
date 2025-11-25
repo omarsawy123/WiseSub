@@ -45,6 +45,14 @@ public interface IEmailQueueService
     Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Waits for an email to become available in any queue.
+    /// More efficient than polling - blocks until an email is available or cancellation is requested.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if an email is available, false if cancelled</returns>
+    Task<bool> WaitForEmailAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Queues multiple emails for processing in a single batch (optimized for performance)
     /// </summary>
     /// <param name="emailMetadataList">List of email metadata</param>

@@ -125,6 +125,36 @@ public class EmailMetadataService : IEmailMetadataService
         return Result.Success();
     }
 
+    public async Task<Result> UpdateStatusAsync(
+        string emailMetadataId,
+        EmailProcessingStatus newStatus,
+        CancellationToken cancellationToken = default)
+    {
+        var emailMetadata = await _emailMetadataRepository.GetByIdAsync(emailMetadataId, cancellationToken);
+        
+        if (emailMetadata == null)
+        {
+            return Result.Failure(EmailMetadataErrors.NotFound);
+        }
+
+        var oldStatus = emailMetadata.Status;
+        emailMetadata.Status = newStatus;
+
+        // Update ProcessedAt timestamp if transitioning to Completed
+        if (newStatus == EmailProcessingStatus.Completed)
+        {
+            emailMetadata.ProcessedAt = DateTime.UtcNow;
+        }
+
+        await _emailMetadataRepository.UpdateAsync(emailMetadata, cancellationToken);
+
+        _logger.LogInformation(
+            "Updated email {EmailMetadataId} status from {OldStatus} to {NewStatus}",
+            emailMetadataId, oldStatus, newStatus);
+
+        return Result.Success();
+    }
+
     /// <summary>
     /// Maps EmailMessage to EmailMetadata entity
     /// </summary>

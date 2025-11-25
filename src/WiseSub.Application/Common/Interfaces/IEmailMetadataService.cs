@@ -1,6 +1,7 @@
 using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
+using WiseSub.Domain.Enums;
 
 namespace WiseSub.Application.Common.Interfaces;
 
@@ -42,5 +43,16 @@ public interface IEmailMetadataService
     Task<Result> MarkAsProcessedAsync(
         string emailMetadataId,
         string? subscriptionId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates the processing status of an email
+    /// </summary>
+    /// <param name="emailMetadataId">The email metadata ID</param>
+    /// <param name="newStatus">The new status</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<Result> UpdateStatusAsync(
+        string emailMetadataId,
+        EmailProcessingStatus newStatus,
         CancellationToken cancellationToken = default);
 }
