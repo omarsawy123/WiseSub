@@ -36,46 +36,45 @@ public class EmailAccountRepository : Repository<EmailAccount>, IEmailAccountRep
 
     public async Task UpdateTokensAsync(string accountId, string encryptedAccessToken, string encryptedRefreshToken, DateTime expiresAt, CancellationToken cancellationToken = default)
     {
-        var account = await GetByIdAsync(accountId, cancellationToken);
-        if (account != null)
-        {
-            account.EncryptedAccessToken = encryptedAccessToken;
-            account.EncryptedRefreshToken = encryptedRefreshToken;
-            account.TokenExpiresAt = expiresAt;
-            await UpdateAsync(account, cancellationToken);
-        }
+        // Single database call using ExecuteUpdateAsync
+        await _dbSet
+            .Where(a => a.Id == accountId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.EncryptedAccessToken, encryptedAccessToken)
+                .SetProperty(a => a.EncryptedRefreshToken, encryptedRefreshToken)
+                .SetProperty(a => a.TokenExpiresAt, expiresAt),
+                cancellationToken);
     }
 
     public async Task UpdateLastScanAsync(string accountId, DateTime lastScanAt, CancellationToken cancellationToken = default)
     {
-        var account = await GetByIdAsync(accountId, cancellationToken);
-        if (account != null)
-        {
-            account.LastScanAt = lastScanAt;
-            await UpdateAsync(account, cancellationToken);
-        }
+        // Single database call using ExecuteUpdateAsync
+        await _dbSet
+            .Where(a => a.Id == accountId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.LastScanAt, lastScanAt),
+                cancellationToken);
     }
 
     public async Task RevokeAccessAsync(string accountId, CancellationToken cancellationToken = default)
     {
-        var account = await GetByIdAsync(accountId, cancellationToken);
-        if (account != null)
-        {
-            // Delete tokens immediately
-            account.EncryptedAccessToken = string.Empty;
-            account.EncryptedRefreshToken = string.Empty;
-            account.IsActive = false;
-            await UpdateAsync(account, cancellationToken);
-        }
+        // Single database call using ExecuteUpdateAsync - deletes tokens immediately
+        await _dbSet
+            .Where(a => a.Id == accountId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.EncryptedAccessToken, string.Empty)
+                .SetProperty(a => a.EncryptedRefreshToken, string.Empty)
+                .SetProperty(a => a.IsActive, false),
+                cancellationToken);
     }
 
     public async Task UpdateHistoryIdAsync(string accountId, string historyId, CancellationToken cancellationToken = default)
     {
-        var account = await GetByIdAsync(accountId, cancellationToken);
-        if (account != null)
-        {
-            account.GmailHistoryId = historyId;
-            await UpdateAsync(account, cancellationToken);
-        }
+        // Single database call using ExecuteUpdateAsync
+        await _dbSet
+            .Where(a => a.Id == accountId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.GmailHistoryId, historyId),
+                cancellationToken);
     }
 }

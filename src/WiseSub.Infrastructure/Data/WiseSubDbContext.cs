@@ -119,7 +119,7 @@ public class WiseSubDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.EmailAccountId);
-            entity.HasIndex(e => e.ExternalEmailId);
+            entity.HasIndex(e => e.ExternalEmailId).IsUnique(); // Unique to prevent duplicate email processing
             entity.HasIndex(e => new { e.Status, e.ProcessedAt });
             entity.HasIndex(e => new { e.EmailAccountId, e.Status });
             entity.Property(e => e.Sender).IsRequired();

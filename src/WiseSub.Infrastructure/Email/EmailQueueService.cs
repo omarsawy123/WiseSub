@@ -96,9 +96,25 @@ public class EmailQueueService : IEmailQueueService
     public Task<QueuedEmail?> DequeueNextEmailAsync(CancellationToken cancellationToken = default)
     {
         // Process in priority order: High -> Normal -> Low
-        QueuedEmail? queuedEmail = null;
+        if (_highPriorityQueue.Reader.TryRead(out var highPriorityEmail))
+        {
+            _logger.LogDebug("Dequeued high priority email {EmailId}", highPriorityEmail.EmailMetadataId);
+            return Task.FromResult<QueuedEmail?>(highPriorityEmail);
+        }
 
-        return Task.FromResult(queuedEmail);
+        if (_normalPriorityQueue.Reader.TryRead(out var normalPriorityEmail))
+        {
+            _logger.LogDebug("Dequeued normal priority email {EmailId}", normalPriorityEmail.EmailMetadataId);
+            return Task.FromResult<QueuedEmail?>(normalPriorityEmail);
+        }
+
+        if (_lowPriorityQueue.Reader.TryRead(out var lowPriorityEmail))
+        {
+            _logger.LogDebug("Dequeued low priority email {EmailId}", lowPriorityEmail.EmailMetadataId);
+            return Task.FromResult<QueuedEmail?>(lowPriorityEmail);
+        }
+
+        return Task.FromResult<QueuedEmail?>(null);
     }
 
     public Task<int> GetPendingCountAsync(CancellationToken cancellationToken = default)
@@ -107,6 +123,37 @@ public class EmailQueueService : IEmailQueueService
                     _normalPriorityQueue.Reader.Count + 
                     _lowPriorityQueue.Reader.Count;
         return Task.FromResult(total);
+    }
+
+    /// <summary>
+    /// Efficiently waits for an email to become available in any queue.
+    /// Uses WaitToReadAsync instead of polling to reduce CPU usage.
+    /// </summary>
+    public async Task<bool> WaitForEmailAsync(CancellationToken cancellationToken = default)
+    {
+        // First check if any queue has items (no-wait path for performance)
+        if (_highPriorityQueue.Reader.Count > 0 ||
+            _normalPriorityQueue.Reader.Count > 0 ||
+            _lowPriorityQueue.Reader.Count > 0)
+        {
+            return true;
+        }
+
+        // Wait for any of the queues to have data available
+        // This is much more efficient than polling with Task.Delay
+        try
+        {
+            var highTask = _highPriorityQueue.Reader.WaitToReadAsync(cancellationToken).AsTask();
+            var normalTask = _normalPriorityQueue.Reader.WaitToReadAsync(cancellationToken).AsTask();
+            var lowTask = _lowPriorityQueue.Reader.WaitToReadAsync(cancellationToken).AsTask();
+
+            var completedTask = await Task.WhenAny(highTask, normalTask, lowTask);
+            return await completedTask;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
     }
 
     public async Task<Result<int>> QueueEmailBatchAsync(
