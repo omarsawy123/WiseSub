@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Domain.Entities;
@@ -10,9 +11,11 @@ namespace WiseSub.Infrastructure.Tests.Repositories;
 
 /// <summary>
 /// Integration tests for repository implementations
+/// Uses SQLite in-memory database which supports ExecuteUpdateAsync
 /// </summary>
 public class RepositoryIntegrationTests : IDisposable
 {
+    private readonly SqliteConnection _connection;
     private readonly WiseSubDbContext _context;
     private readonly IUserRepository _userRepository;
     private readonly IEmailAccountRepository _emailAccountRepository;
@@ -22,12 +25,17 @@ public class RepositoryIntegrationTests : IDisposable
 
     public RepositoryIntegrationTests()
     {
-        // Create in-memory database for testing
+        // Create SQLite in-memory database (supports ExecuteUpdateAsync unlike EF Core InMemory)
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+
         var options = new DbContextOptionsBuilder<WiseSubDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseSqlite(_connection)
             .Options;
 
         _context = new WiseSubDbContext(options);
+        _context.Database.EnsureCreated();
+        
         _userRepository = new UserRepository(_context);
         _emailAccountRepository = new EmailAccountRepository(_context);
         _subscriptionRepository = new SubscriptionRepository(_context);
@@ -102,6 +110,9 @@ public class RepositoryIntegrationTests : IDisposable
             TokenExpiresAt = DateTime.UtcNow.AddHours(1)
         };
         await _emailAccountRepository.AddAsync(account);
+        
+        // Clear change tracker to ensure we get fresh data from database after ExecuteUpdateAsync
+        _context.ChangeTracker.Clear();
 
         // Act
         await _emailAccountRepository.UpdateTokensAsync(
@@ -304,5 +315,7 @@ public class RepositoryIntegrationTests : IDisposable
     {
         _context.Database.EnsureDeleted();
         _context.Dispose();
+        _connection.Close();
+        _connection.Dispose();
     }
 }

@@ -115,10 +115,20 @@ public class EmailQueueServiceTests
         // Act
         var dequeuedEmail = await _emailQueueService.DequeueNextEmailAsync();
 
-        // Assert - Note: DequeueNextEmailAsync is not yet implemented, will return null
-        // When implemented, this test should verify high priority is returned first
-        // TODO: Implement dequeue logic
-        Assert.Null(dequeuedEmail);
+        // Assert - High priority should be returned first even though it was queued second
+        Assert.NotNull(dequeuedEmail);
+        Assert.Equal("metadata-high", dequeuedEmail.EmailMetadataId);
+        Assert.Equal(EmailProcessingPriority.High, dequeuedEmail.Priority);
+
+        // Dequeue again - should get low priority now
+        var secondDequeue = await _emailQueueService.DequeueNextEmailAsync();
+        Assert.NotNull(secondDequeue);
+        Assert.Equal("metadata-low", secondDequeue.EmailMetadataId);
+        Assert.Equal(EmailProcessingPriority.Low, secondDequeue.Priority);
+
+        // Queue is now empty
+        var emptyDequeue = await _emailQueueService.DequeueNextEmailAsync();
+        Assert.Null(emptyDequeue);
     }
 
     [Fact]

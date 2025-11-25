@@ -10,12 +10,11 @@ public class TokenEncryptionServiceTests
 
     public TokenEncryptionServiceTests()
     {
-        // Create configuration with test encryption keys
+        // Create configuration with test encryption key (IV is now generated per encryption)
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Encryption:Key"] = "kI38I1KsiqNMQyOpkC2UU1YBvsdMycIfcRNSm3h7Zfs=", // 32 bytes base64
-                ["Encryption:IV"] = "4uPMLu/QFOuL5Ss5HU9zXA==" // 16 bytes base64
+                ["Encryption:Key"] = "kI38I1KsiqNMQyOpkC2UU1YBvsdMycIfcRNSm3h7Zfs=" // 32 bytes base64
             })
             .Build();
 
@@ -86,7 +85,7 @@ public class TokenEncryptionServiceTests
     }
 
     [Fact]
-    public void Encrypt_SameTokenTwice_ProducesSameEncryptedValue()
+    public void Encrypt_SameTokenTwice_ProducesDifferentEncryptedValues()
     {
         // Arrange
         var token = "test-token";
@@ -96,8 +95,12 @@ public class TokenEncryptionServiceTests
         var encrypted2 = _encryptionService.Encrypt(token);
 
         // Assert
-        // With the same IV, encrypting the same plaintext should produce the same ciphertext
-        Assert.Equal(encrypted1, encrypted2);
+        // With random IV per encryption, same plaintext produces different ciphertexts
+        // This is the SECURE behavior - prevents pattern detection
+        Assert.NotEqual(encrypted1, encrypted2);
+        
+        // But both should decrypt to the same value
+        Assert.Equal(_encryptionService.Decrypt(encrypted1), _encryptionService.Decrypt(encrypted2));
     }
 
     [Fact]
@@ -113,5 +116,15 @@ public class TokenEncryptionServiceTests
 
         // Assert
         Assert.NotEqual(encrypted1, encrypted2);
+    }
+
+    [Fact]
+    public void Decrypt_TooShortCiphertext_ThrowsArgumentException()
+    {
+        // Arrange - ciphertext shorter than IV size (16 bytes)
+        var tooShort = Convert.ToBase64String(new byte[10]);
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => _encryptionService.Decrypt(tooShort));
     }
 }

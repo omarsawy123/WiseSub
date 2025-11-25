@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System.Text.Json;
@@ -9,12 +11,23 @@ namespace WiseSub.API.Tests.Middleware;
 public class GlobalExceptionHandlerTests
 {
     private readonly Mock<ILogger<GlobalExceptionHandler>> _loggerMock;
+    private readonly Mock<IHostEnvironment> _environmentMock;
     private readonly GlobalExceptionHandler _handler;
+    private readonly GlobalExceptionHandler _productionHandler;
 
     public GlobalExceptionHandlerTests()
     {
         _loggerMock = new Mock<ILogger<GlobalExceptionHandler>>();
-        _handler = new GlobalExceptionHandler(_loggerMock.Object);
+        
+        // Development environment - shows exception details
+        _environmentMock = new Mock<IHostEnvironment>();
+        _environmentMock.Setup(e => e.EnvironmentName).Returns(Environments.Development);
+        _handler = new GlobalExceptionHandler(_loggerMock.Object, _environmentMock.Object);
+        
+        // Production environment - hides exception details
+        var productionEnvMock = new Mock<IHostEnvironment>();
+        productionEnvMock.Setup(e => e.EnvironmentName).Returns(Environments.Production);
+        _productionHandler = new GlobalExceptionHandler(_loggerMock.Object, productionEnvMock.Object);
     }
 
     [Fact]
@@ -168,5 +181,51 @@ public class GlobalExceptionHandlerTests
         // Assert
         Assert.True(result);
         Assert.Equal(500, httpContext.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_InProduction_HidesExceptionDetails()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = new InvalidOperationException("Sensitive internal error details");
+
+        // Act
+        await _productionHandler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.Equal("An unexpected error occurred. Please try again later.", problemDetails.GetProperty("detail").GetString());
+        Assert.False(problemDetails.TryGetProperty("exceptionType", out _));
+        Assert.False(problemDetails.TryGetProperty("stackTrace", out _));
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_InDevelopment_ShowsExceptionDetails()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = new InvalidOperationException("Detailed error message");
+
+        // Act
+        await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.Equal("Detailed error message", problemDetails.GetProperty("detail").GetString());
+        Assert.True(problemDetails.TryGetProperty("exceptionType", out var exType));
+        Assert.Equal("InvalidOperationException", exType.GetString());
     }
 }
