@@ -128,6 +128,14 @@ public class SubscriptionRepository : Repository<Subscription>, ISubscriptionRep
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IEnumerable<Subscription>> FindPotentialDuplicatesAsync(string userId, string serviceName, CancellationToken cancellationToken = default)
+    {
+        // Get all non-archived subscriptions for the user to check for duplicates
+        return await _dbSet
+            .Where(s => s.UserId == userId && s.Status != SubscriptionStatus.Archived)
+            .ToListAsync(cancellationToken);
+    }
+
     /// <summary>
     /// Normalizes billing cycle to monthly equivalent
     /// Annual: Divide by 12, Quarterly: Divide by 3, Weekly: Multiply by 4.33

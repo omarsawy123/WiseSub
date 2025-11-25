@@ -47,6 +47,26 @@ public interface ISubscriptionRepository : IRepository<Subscription>
     /// Gets spending breakdown by category for a user
     /// </summary>
     Task<Dictionary<string, decimal>> GetSpendingByCategoryAsync(string userId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Finds potential duplicate subscription by service name and email account (exact match)
+    /// </summary>
+    Task<Subscription?> FindDuplicateAsync(string serviceName, string emailAccountId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Archives all subscriptions for a given email account
+    /// </summary>
+    Task ArchiveByEmailAccountAsync(string emailAccountId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Gets subscriptions requiring user review
+    /// </summary>
+    Task<IEnumerable<Subscription>> GetRequiringReviewAsync(string userId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Finds potential duplicate subscriptions using fuzzy matching on service name
+    /// </summary>
+    Task<IEnumerable<Subscription>> FindPotentialDuplicatesAsync(string userId, string serviceName, CancellationToken cancellationToken = default);
 }
 
 public class SubscriptionStats
