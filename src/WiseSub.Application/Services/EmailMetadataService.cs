@@ -130,27 +130,18 @@ public class EmailMetadataService : IEmailMetadataService
         EmailProcessingStatus newStatus,
         CancellationToken cancellationToken = default)
     {
-        var emailMetadata = await _emailMetadataRepository.GetByIdAsync(emailMetadataId, cancellationToken);
-        
-        if (emailMetadata == null)
+        // Single database call using ExecuteUpdateAsync in repository
+        var rowsAffected = await _emailMetadataRepository.UpdateStatusAsync(
+            emailMetadataId, newStatus, cancellationToken);
+
+        if (rowsAffected == 0)
         {
             return Result.Failure(EmailMetadataErrors.NotFound);
         }
 
-        var oldStatus = emailMetadata.Status;
-        emailMetadata.Status = newStatus;
-
-        // Update ProcessedAt timestamp if transitioning to Completed
-        if (newStatus == EmailProcessingStatus.Completed)
-        {
-            emailMetadata.ProcessedAt = DateTime.UtcNow;
-        }
-
-        await _emailMetadataRepository.UpdateAsync(emailMetadata, cancellationToken);
-
         _logger.LogInformation(
-            "Updated email {EmailMetadataId} status from {OldStatus} to {NewStatus}",
-            emailMetadataId, oldStatus, newStatus);
+            "Updated email {EmailMetadataId} status to {NewStatus}",
+            emailMetadataId, newStatus);
 
         return Result.Success();
     }

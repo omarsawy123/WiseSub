@@ -68,4 +68,16 @@ public interface IEmailMetadataRepository : IRepository<EmailMetadata>
     Task<List<EmailMetadata>> GetUnprocessedByExternalIdsAsync(
         List<string> externalIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates the status of an email metadata record in a single database call
+    /// </summary>
+    /// <param name="emailMetadataId">The email metadata ID</param>
+    /// <param name="newStatus">The new status</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Number of rows affected (0 if not found, 1 if updated)</returns>
+    Task<int> UpdateStatusAsync(
+        string emailMetadataId,
+        Domain.Enums.EmailProcessingStatus newStatus,
+        CancellationToken cancellationToken = default);
 }

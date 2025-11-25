@@ -87,4 +87,21 @@ public class EmailMetadataRepository : Repository<EmailMetadata>, IEmailMetadata
                          em.Status != EmailProcessingStatus.Processing)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<int> UpdateStatusAsync(
+        string emailMetadataId,
+        EmailProcessingStatus newStatus,
+        CancellationToken cancellationToken = default)
+    {
+        // Single database call using ExecuteUpdateAsync
+        var rowsAffected = await _dbSet
+            .Where(em => em.Id == emailMetadataId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(em => em.Status, newStatus)
+                .SetProperty(em => em.ProcessedAt, 
+                    newStatus == EmailProcessingStatus.Completed ? DateTime.UtcNow : (DateTime?)null),
+                cancellationToken);
+
+        return rowsAffected;
+    }
 }
