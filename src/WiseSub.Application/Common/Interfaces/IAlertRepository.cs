@@ -19,6 +19,11 @@ public interface IAlertRepository : IRepository<Alert>
     Task<IEnumerable<Alert>> GetBySubscriptionIdAsync(string subscriptionId, CancellationToken cancellationToken = default);
     
     /// <summary>
+    /// Gets a specific alert by subscription ID and type (for deduplication)
+    /// </summary>
+    Task<Alert?> GetBySubscriptionAndTypeAsync(string subscriptionId, AlertType type, CancellationToken cancellationToken = default);
+    
+    /// <summary>
     /// Gets pending alerts scheduled before or at the specified time
     /// </summary>
     Task<IEnumerable<Alert>> GetPendingAlertsAsync(DateTime scheduledBefore, CancellationToken cancellationToken = default);

@@ -34,6 +34,13 @@ public class EmailAccountRepository : Repository<EmailAccount>, IEmailAccountRep
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IEnumerable<EmailAccount>> GetAllActiveAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Where(ea => ea.IsActive)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task UpdateTokensAsync(string accountId, string encryptedAccessToken, string encryptedRefreshToken, DateTime expiresAt, CancellationToken cancellationToken = default)
     {
         // Single database call using ExecuteUpdateAsync

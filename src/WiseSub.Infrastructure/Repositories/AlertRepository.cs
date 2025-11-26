@@ -32,6 +32,17 @@ public class AlertRepository : Repository<Alert>, IAlertRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<Alert?> GetBySubscriptionAndTypeAsync(string subscriptionId, AlertType type, CancellationToken cancellationToken = default)
+    {
+        // Check for existing alert within the last 30 days to avoid duplicates
+        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+        return await _dbSet
+            .Where(a => a.SubscriptionId == subscriptionId 
+                && a.Type == type 
+                && a.ScheduledFor >= thirtyDaysAgo)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IEnumerable<Alert>> GetPendingAlertsAsync(DateTime scheduledBefore, CancellationToken cancellationToken = default)
     {
         return await _dbSet

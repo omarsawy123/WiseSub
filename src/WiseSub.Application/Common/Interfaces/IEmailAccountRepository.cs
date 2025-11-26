@@ -23,6 +23,11 @@ public interface IEmailAccountRepository : IRepository<EmailAccount>
     Task<IEnumerable<EmailAccount>> GetActiveByUserIdAsync(string userId, CancellationToken cancellationToken = default);
     
     /// <summary>
+    /// Gets all active email accounts across all users (for background job scanning)
+    /// </summary>
+    Task<IEnumerable<EmailAccount>> GetAllActiveAsync(CancellationToken cancellationToken = default);
+    
+    /// <summary>
     /// Updates the access token for an email account
     /// </summary>
     Task UpdateTokensAsync(string accountId, string encryptedAccessToken, string encryptedRefreshToken, DateTime expiresAt, CancellationToken cancellationToken = default);
