@@ -1,11 +1,15 @@
 using System.Text;
 using System.Threading.RateLimiting;
+using Hangfire;
+using Hangfire.Dashboard;
+using Hangfire.InMemory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using WiseSub.API.Middleware;
 using WiseSub.Application;
 using WiseSub.Infrastructure;
+using WiseSub.Infrastructure.BackgroundServices.Jobs;
 using WiseSub.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +26,19 @@ builder.Services.AddApplication();
 
 // Add Infrastructure layer services
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// Configure Hangfire for background job processing
+builder.Services.AddHangfire(configuration => configuration
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseInMemoryStorage());
+
+builder.Services.AddHangfireServer(options =>
+{
+    options.WorkerCount = Environment.ProcessorCount * 2;
+    options.Queues = new[] { "default", "email-scanning", "alerts", "maintenance" };
+});
 
 // Configure Rate Limiting to protect against brute-force attacks
 builder.Services.AddRateLimiter(options =>
@@ -100,6 +117,16 @@ app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
+
+// Enable Hangfire Dashboard (protected in production)
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    // In production, add authorization filter
+    Authorization = builder.Environment.IsDevelopment() 
+        ? Array.Empty<IDashboardAuthorizationFilter>() 
+        : new[] { new HangfireAuthorizationFilter() }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -110,5 +137,21 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<WiseSubDbContext>();
     dbContext.Database.EnsureCreated();
 }
+
+// Schedule recurring Hangfire jobs
+RecurringJob.AddOrUpdate<EmailScanningJob>(
+    "scan-all-emails",
+    job => job.ScanAllAccountsAsync(CancellationToken.None),
+    "*/15 * * * *"); // Every 15 minutes
+
+RecurringJob.AddOrUpdate<AlertGenerationJob>(
+    "generate-alerts",
+    job => job.GenerateAlertsAsync(CancellationToken.None),
+    "0 8 * * *"); // Daily at 8 AM UTC
+
+RecurringJob.AddOrUpdate<SubscriptionUpdateJob>(
+    "update-subscriptions",
+    job => job.UpdateAllSubscriptionsAsync(CancellationToken.None),
+    "0 2 * * *"); // Daily at 2 AM UTC
 
 app.Run();
