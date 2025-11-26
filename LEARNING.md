@@ -154,4 +154,99 @@ This learning log documents:
 
 ---
 
+### [2025-01-XX] - Task 9: Hangfire Background Job Infrastructure
+
+**What Changed:**
+- Added Hangfire NuGet packages to API and Infrastructure projects:
+  - `Hangfire.AspNetCore` (1.8.22) to WiseSub.API
+  - `Hangfire.InMemory` (1.0.1) to WiseSub.API
+  - `Hangfire.Core` (1.8.22) to WiseSub.Infrastructure
+- Created three background job classes in `WiseSub.Infrastructure/BackgroundServices/Jobs/`:
+  - `EmailScanningJob` - Scans email accounts for subscription emails
+  - `AlertGenerationJob` - Generates renewal alerts (7-day and 3-day warnings)
+  - `SubscriptionUpdateJob` - Updates subscription statuses and renewal dates
+- Extended repositories with new methods:
+  - `IEmailAccountRepository.GetAllActiveAsync()` - Retrieves all active email accounts
+  - `IAlertRepository.GetBySubscriptionAndTypeAsync()` - Finds existing alerts to prevent duplicates
+- Created `HangfireAuthorizationFilter` for dashboard security
+- Configured Hangfire in `Program.cs` with dashboard and recurring jobs
+
+**Why:**
+- Task 9 required implementing scheduled background processing for email scanning, alert generation, and subscription maintenance
+- Hangfire provides a robust job scheduling framework with built-in retry logic and dashboard monitoring
+- In-memory storage is appropriate for MVP; can upgrade to SQL Server/Redis in production
+
+**Patterns & Best Practices:**
+
+1. **AutomaticRetry Attribute**: Each job uses `[AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 60, 300, 900 })]` for exponential backoff
+   ```csharp
+   [AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 60, 300, 900 })]
+   public async Task ScanSingleAccountAsync(string emailAccountId)
+   ```
+
+2. **Job Orchestration Pattern**: Parent jobs schedule child jobs for parallel processing
+   ```csharp
+   public async Task ScanAllAccountsAsync()
+   {
+       var accounts = await _emailAccountRepository.GetAllActiveAsync();
+       foreach (var account in accounts)
+       {
+           BackgroundJob.Enqueue<EmailScanningJob>(job => 
+               job.ScanSingleAccountAsync(account.Id));
+       }
+   }
+   ```
+
+3. **Alert Deduplication**: AlertGenerationJob checks for existing alerts before creating new ones
+   ```csharp
+   var existingAlert = await _alertRepository.GetBySubscriptionAndTypeAsync(
+       subscription.Id, AlertType.RenewalUpcoming7Days);
+   if (existingAlert != null) continue;
+   ```
+
+4. **Status Transitions**: SubscriptionUpdateJob properly handles subscription lifecycle
+   - `TrialActive` → `Active` when trial ends
+   - Advances `NextRenewalDate` by billing cycle period
+
+**Recurring Job Schedule:**
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| `EmailScanningJob` | `*/15 * * * *` | Every 15 minutes |
+| `AlertGenerationJob` | `0 8 * * *` | Daily at 8 AM UTC |
+| `SubscriptionUpdateJob` | `0 2 * * *` | Daily at 2 AM UTC |
+
+**Dashboard Configuration:**
+- Development: Open access at `/hangfire`
+- Production: Protected by `HangfireAuthorizationFilter` (requires authentication)
+
+**Trade-offs:**
+| Option | Pros | Cons | Decision |
+|--------|------|------|----------|
+| In-memory storage | Simple, no DB setup | Jobs lost on restart | ✅ Chosen for MVP |
+| SQL Server storage | Persistent, scalable | More infrastructure | For production |
+| Per-user local time alerts | Better UX | Complex timezone handling | Deferred |
+| UTC-based scheduling | Simple, consistent | 8 AM UTC may not suit all users | ✅ Chosen |
+
+**Key Takeaways:**
+1. **Separate job classes from hosted services**: Hangfire jobs should be simple classes with methods, not `BackgroundService` implementations
+2. **Use `[AutomaticRetry]` for exponential backoff**: Built-in retry is more reliable than manual implementation
+3. **Check for duplicates before creating**: Alert generation must be idempotent to prevent duplicate notifications
+4. **Dashboard security**: Always protect the Hangfire dashboard in production
+5. **Job dependencies**: Use `BackgroundJob.Enqueue` for immediate work, `RecurringJob.AddOrUpdate` for schedules
+
+**Files Modified/Created:**
+- `src/WiseSub.API/WiseSub.API.csproj` (added Hangfire packages)
+- `src/WiseSub.Infrastructure/WiseSub.Infrastructure.csproj` (added Hangfire.Core)
+- `src/WiseSub.Infrastructure/BackgroundServices/Jobs/EmailScanningJob.cs` (new)
+- `src/WiseSub.Infrastructure/BackgroundServices/Jobs/AlertGenerationJob.cs` (new)
+- `src/WiseSub.Infrastructure/BackgroundServices/Jobs/SubscriptionUpdateJob.cs` (new)
+- `src/WiseSub.Application/Common/Interfaces/IEmailAccountRepository.cs` (extended)
+- `src/WiseSub.Infrastructure/Repositories/EmailAccountRepository.cs` (extended)
+- `src/WiseSub.Application/Common/Interfaces/IAlertRepository.cs` (extended)
+- `src/WiseSub.Infrastructure/Repositories/AlertRepository.cs` (extended)
+- `src/WiseSub.API/Program.cs` (Hangfire configuration)
+- `src/WiseSub.API/Middleware/HangfireAuthorizationFilter.cs` (new)
+
+---
+
 *Add new entries above this line*

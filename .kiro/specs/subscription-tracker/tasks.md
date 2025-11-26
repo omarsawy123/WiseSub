@@ -130,7 +130,7 @@
   - **Property 10: Low confidence flagging**
   - **Validates: Requirements 2.5**
 
-- [ ] 8. Implement subscription management service
+- [x] 8. Implement subscription management service
   - Create SubscriptionService with business logic
   - Implement CreateOrUpdateAsync with deduplication (fuzzy matching 85% similarity)
   - Implement GetUserSubscriptionsAsync with filtering
@@ -139,15 +139,15 @@
   - Create subscription history tracking
   - _Requirements: 2.4, 3.1, 3.3_
 
-- [ ]* 8.1 Write property test for database record creation
+- [x]* 8.1 Write property test for database record creation
   - **Property 9: Database record creation**
   - **Validates: Requirements 2.4**
 
-- [ ]* 8.2 Write property test for billing cycle normalization
+- [x]* 8.2 Write property test for billing cycle normalization
   - **Property 14: Billing cycle normalization**
   - **Validates: Requirements 3.3**
 
-- [ ] 9. Set up Hangfire for background jobs
+- [x] 9. Set up Hangfire for background jobs
   - Install and configure Hangfire with in-memory storage
   - Create EmailScanningJob (runs every 15 minutes per account)
   - Create AlertGenerationJob (runs daily at 8 AM user local time)
