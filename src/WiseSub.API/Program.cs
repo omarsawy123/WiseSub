@@ -37,7 +37,7 @@ builder.Services.AddHangfire(configuration => configuration
 builder.Services.AddHangfireServer(options =>
 {
     options.WorkerCount = Environment.ProcessorCount * 2;
-    options.Queues = new[] { "default", "email-scanning", "alerts", "maintenance" };
+    options.Queues = new[] { "default", "email-processing", "email-scanning", "alerts", "maintenance" };
 });
 
 // Configure Rate Limiting to protect against brute-force attacks
