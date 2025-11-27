@@ -1,3 +1,6 @@
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -21,8 +24,8 @@ public class EmailIngestionServiceTests
     private readonly Mock<ILogger<EmailIngestionService>> _mockLogger;
     private readonly Mock<IEmailAccountRepository> _mockEmailAccountRepository;
     private readonly Mock<IEmailProviderFactory> _mockProviderFactory;
-    private readonly Mock<IEmailQueueService> _mockQueueService;
     private readonly Mock<IEmailMetadataService> _mockMetadataService;
+    private readonly Mock<IBackgroundJobClient> _mockBackgroundJobClient;
     private readonly EmailScanConfiguration _config;
 
     public EmailIngestionServiceTests()
@@ -30,8 +33,8 @@ public class EmailIngestionServiceTests
         _mockLogger = new Mock<ILogger<EmailIngestionService>>();
         _mockEmailAccountRepository = new Mock<IEmailAccountRepository>();
         _mockProviderFactory = new Mock<IEmailProviderFactory>();
-        _mockQueueService = new Mock<IEmailQueueService>();
         _mockMetadataService = new Mock<IEmailMetadataService>();
+        _mockBackgroundJobClient = new Mock<IBackgroundJobClient>();
         _config = new EmailScanConfiguration
         {
             DefaultLookbackMonths = 12,
@@ -46,8 +49,8 @@ public class EmailIngestionServiceTests
             _mockLogger.Object,
             _mockEmailAccountRepository.Object,
             _mockProviderFactory.Object,
-            _mockQueueService.Object,
             _mockMetadataService.Object,
+            _mockBackgroundJobClient.Object,
             Options.Create(_config));
     }
 
@@ -240,14 +243,7 @@ public class EmailIngestionServiceTests
                         ReceivedAt = DateTime.UtcNow.AddDays(-1), Status = EmailProcessingStatus.Pending }
             }));
 
-        _mockQueueService
-            .Setup(q => q.QueueEmailBatchAsync(
-                It.IsAny<List<EmailMetadata>>(),
-                It.IsAny<Dictionary<string, EmailMessage>>(),
-                It.IsAny<EmailProcessingPriority>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(WiseSub.Domain.Common.Result.Success(1));
-
+        // Hangfire jobs are scheduled (no longer using in-memory queue)
         var service = CreateService();
 
         // Act
@@ -325,28 +321,18 @@ public class EmailIngestionServiceTests
                         ReceivedAt = DateTime.UtcNow, Status = EmailProcessingStatus.Pending }
             }));
 
-        // Capture what's passed to queue
-        Dictionary<string, EmailMessage>? capturedEmails = null;
-        _mockQueueService
-            .Setup(q => q.QueueEmailBatchAsync(
-                It.IsAny<List<EmailMetadata>>(),
-                It.IsAny<Dictionary<string, EmailMessage>>(),
-                It.IsAny<EmailProcessingPriority>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<List<EmailMetadata>, Dictionary<string, EmailMessage>, EmailProcessingPriority, CancellationToken>(
-                (metadata, emailsDict, priority, ct) => capturedEmails = emailsDict)
-            .ReturnsAsync(WiseSub.Domain.Common.Result.Success(1));
-
+        // Note: With Hangfire, email body is available during job execution, not stored in queue
         var service = CreateService();
 
         // Act
         await service.ScanEmailAccountAsync(emailAccount);
 
-        // Assert - Full email content should be passed to queue for processing
-        Assert.NotNull(capturedEmails);
-        Assert.True(capturedEmails.ContainsKey("email-1"));
-        Assert.NotNull(capturedEmails["email-1"].Body);
-        Assert.Equal("Full email body for AI processing only", capturedEmails["email-1"].Body);
+        // Assert - Hangfire jobs are scheduled for email processing
+        // The full email body is only used during AI processing in the job
+        _mockBackgroundJobClient.Verify(c => c.Create(
+            It.IsAny<Job>(),
+            It.IsAny<IState>()), 
+            Times.AtLeastOnce());
     }
 
     #endregion
