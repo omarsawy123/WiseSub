@@ -8,10 +8,17 @@ using WiseSub.Domain.Entities;
 namespace WiseSub.Infrastructure.Email;
 
 /// <summary>
-/// In-memory implementation of email queue service for MVP
-/// Uses priority-based queuing with thread-safe collections
+/// [DEPRECATED] In-memory implementation of email queue service for MVP.
+/// This service has been replaced by Hangfire-based job scheduling.
 /// </summary>
+/// <remarks>
+/// Migration: Use IBackgroundJobClient.Enqueue&lt;EmailProcessingJob&gt;() instead.
+/// The new implementation provides automatic retry, persistence, and better monitoring.
+/// </remarks>
+[Obsolete("Use Hangfire-based EmailProcessingJob instead. This service is no longer registered in DI.")]
+#pragma warning disable CS0618 // Type or member is obsolete
 public class EmailQueueService : IEmailQueueService
+#pragma warning restore CS0618
 {
     private readonly ILogger<EmailQueueService> _logger;
 

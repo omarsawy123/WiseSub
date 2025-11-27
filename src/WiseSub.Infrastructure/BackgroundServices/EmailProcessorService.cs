@@ -7,9 +7,15 @@ using WiseSub.Domain.Enums;
 namespace WiseSub.Infrastructure.BackgroundServices;
 
 /// <summary>
-/// Background service that processes emails from the queue
-/// Handles classification, extraction, and subscription creation
+/// [DEPRECATED] Background service that processes emails from the in-memory queue.
+/// This service has been replaced by Hangfire-based EmailProcessingJob.
+/// Kept for reference only - do not use in new code.
 /// </summary>
+/// <remarks>
+/// Migration: Use WiseSub.Infrastructure.BackgroundServices.Jobs.EmailProcessingJob instead.
+/// The new implementation uses Hangfire for reliable job scheduling with automatic retry.
+/// </remarks>
+[Obsolete("Use Hangfire-based EmailProcessingJob instead. This service is no longer registered in DI.")]
 public class EmailProcessorService
 {
     private readonly ILogger<EmailProcessorService> _logger;

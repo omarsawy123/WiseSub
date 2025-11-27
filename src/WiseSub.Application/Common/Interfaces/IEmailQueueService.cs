@@ -5,8 +5,14 @@ using WiseSub.Domain.Entities;
 namespace WiseSub.Application.Common.Interfaces;
 
 /// <summary>
-/// Service for queueing emails for AI processing with priority support
+/// [DEPRECATED] Service for queueing emails for AI processing with priority support.
+/// This interface has been replaced by Hangfire-based job scheduling.
 /// </summary>
+/// <remarks>
+/// Migration: Use IBackgroundJobClient.Enqueue&lt;EmailProcessingJob&gt;() instead.
+/// The new implementation provides automatic retry, persistence, and better monitoring.
+/// </remarks>
+[Obsolete("Use Hangfire-based EmailProcessingJob instead. See EmailIngestionService for usage example.")]
 public interface IEmailQueueService
 {
     /// <summary>
