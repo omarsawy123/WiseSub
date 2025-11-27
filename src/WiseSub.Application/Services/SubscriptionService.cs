@@ -1,4 +1,5 @@
 using WiseSub.Application.Common.Interfaces;
+using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
@@ -455,5 +456,38 @@ public class SubscriptionService : ISubscriptionService
         }
 
         return matrix[sourceLength, targetLength];
+    }
+
+    public async Task<Result<Subscription>> CreateOrUpdateFromExtractionAsync(
+        string userId,
+        ExtractionResult extraction,
+        string sourceEmailId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return Result.Failure<Subscription>(ValidationErrors.Required);
+
+        if (extraction == null)
+            return Result.Failure<Subscription>(ValidationErrors.Required);
+
+        if (string.IsNullOrWhiteSpace(extraction.ServiceName))
+            return Result.Failure<Subscription>(SubscriptionErrors.InvalidServiceName);
+
+        // Convert ExtractionResult to CreateSubscriptionRequest
+        var request = new CreateSubscriptionRequest
+        {
+            UserId = userId,
+            EmailAccountId = string.Empty, // Will be set by email metadata
+            ServiceName = extraction.ServiceName,
+            Price = extraction.Price,
+            Currency = extraction.Currency ?? "USD",
+            BillingCycle = extraction.BillingCycle,
+            NextRenewalDate = extraction.NextRenewalDate,
+            Category = extraction.Category,
+            ExtractionConfidence = extraction.ConfidenceScore,
+            SourceEmailId = sourceEmailId
+        };
+
+        return await CreateOrUpdateAsync(request, cancellationToken);
     }
 }

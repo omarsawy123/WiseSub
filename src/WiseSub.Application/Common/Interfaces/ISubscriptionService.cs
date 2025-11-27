@@ -1,3 +1,4 @@
+using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
@@ -77,6 +78,15 @@ public interface ISubscriptionService
     /// Calculates the monthly normalized price for a subscription
     /// </summary>
     decimal NormalizeToMonthly(decimal price, BillingCycle billingCycle);
+
+    /// <summary>
+    /// Creates or updates a subscription from AI extraction result
+    /// </summary>
+    Task<Result<Subscription>> CreateOrUpdateFromExtractionAsync(
+        string userId,
+        ExtractionResult extraction,
+        string sourceEmailId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

@@ -30,6 +30,7 @@
         public static readonly Error InvalidBillingCycle = new Error("Subscription.InvalidBillingCycle", "The billing cycle is invalid.");
         public static readonly Error AlreadyCancelled = new Error("Subscription.AlreadyCancelled", "The subscription is already cancelled.");
         public static readonly Error UpdateFailed = new Error("Subscription.UpdateFailed", "Failed to update the subscription.");
+        public static readonly Error InvalidServiceName = new Error("Subscription.InvalidServiceName", "The service name is required.");
     }
 
     public static class EmailAccountErrors
