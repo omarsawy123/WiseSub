@@ -61,7 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailProviderClient, GmailClient>(); // Register as provider client too
         services.AddSingleton<IEmailProviderFactory, EmailProviderFactory>();
         services.AddScoped<IEmailIngestionService, EmailIngestionService>();
-        services.AddSingleton<IEmailQueueService, EmailQueueService>();
+        // Note: IEmailQueueService removed - using Hangfire for job processing instead
 
         // Register AI services
         services.AddSingleton<IOpenAIClient, OpenAIClient>();

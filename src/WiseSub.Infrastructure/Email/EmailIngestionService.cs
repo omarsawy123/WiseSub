@@ -1,3 +1,4 @@
+using Hangfire;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WiseSub.Application.Common.Configuration;
@@ -7,34 +8,36 @@ using WiseSub.Application.Common.Models;
 using WiseSub.Domain.Common;
 using WiseSub.Domain.Entities;
 using WiseSub.Domain.Enums;
+using WiseSub.Infrastructure.BackgroundServices.Jobs;
 
 namespace WiseSub.Infrastructure.Email;
 
 /// <summary>
-/// Service for ingesting emails from connected email accounts
+/// Service for ingesting emails from connected email accounts.
+/// Uses Hangfire for background job processing instead of in-memory queues.
 /// </summary>
 public class EmailIngestionService : IEmailIngestionService
 {
     private readonly ILogger<EmailIngestionService> _logger;
     private readonly IEmailAccountRepository _emailAccountRepository;
     private readonly IEmailProviderFactory _providerFactory;
-    private readonly IEmailQueueService _emailQueueService;
     private readonly IEmailMetadataService _emailMetadataService;
+    private readonly IBackgroundJobClient _backgroundJobClient;
     private readonly EmailScanConfiguration _config;
 
     public EmailIngestionService(
         ILogger<EmailIngestionService> logger,
         IEmailAccountRepository emailAccountRepository,
         IEmailProviderFactory providerFactory,
-        IEmailQueueService emailQueueService,
         IEmailMetadataService emailMetadataService,
+        IBackgroundJobClient backgroundJobClient,
         IOptions<EmailScanConfiguration> config)
     {
         _logger = logger;
         _emailAccountRepository = emailAccountRepository;
         _providerFactory = providerFactory;
-        _emailQueueService = emailQueueService;
         _emailMetadataService = emailMetadataService;
+        _backgroundJobClient = backgroundJobClient;
         _config = config.Value;
     }
 
@@ -110,25 +113,44 @@ public class EmailIngestionService : IEmailIngestionService
 
         var metadataList = metadataResult.Value;
 
-        // Step 2: Queue emails for processing
-        var emailsDict = emailList.ToDictionary(e => e.Id, e => e);
-        var queueResult = await _emailQueueService.QueueEmailBatchAsync(
-            metadataList,
-            emailsDict,
-            EmailProcessingPriority.High,
-            cancellationToken);
-
-        if (!queueResult.IsSuccess)
+        // Step 2: Schedule Hangfire jobs for email processing (replaces in-memory queue)
+        var scheduledCount = 0;
+        foreach (var metadata in metadataList)
         {
-            _logger.LogWarning("Failed to queue emails for account {EmailAccountId}: {Error}",
-                emailAccount.Id, queueResult.ErrorMessage);
-            return Result.Failure<int>(EmailMetadataErrors.QueueFailed);
+            try
+            {
+                // Determine priority based on email age
+                var priority = DeterminePriority(metadata);
+
+                // Schedule background job for processing
+                _backgroundJobClient.Enqueue<EmailProcessingJob>(
+                    job => job.ProcessEmailAsync(metadata.Id, emailAccount.Id, priority));
+
+                scheduledCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to schedule processing for email {EmailMetadataId}", metadata.Id);
+            }
         }
 
-        _logger.LogInformation("Scanned account {EmailAccountId}: {QueuedCount} new emails queued",
-            emailAccount.Id, queueResult.Value);
+        _logger.LogInformation("Scanned account {EmailAccountId}: {ScheduledCount} emails scheduled for processing",
+            emailAccount.Id, scheduledCount);
 
         return Result.Success(emailList.Count);
+    }
+
+    private static EmailProcessingPriority DeterminePriority(EmailMetadata metadata)
+    {
+        // Recent emails get higher priority
+        var age = DateTime.UtcNow - metadata.ReceivedAt;
+
+        if (age < TimeSpan.FromHours(24))
+            return EmailProcessingPriority.High;
+        if (age < TimeSpan.FromDays(7))
+            return EmailProcessingPriority.Normal;
+
+        return EmailProcessingPriority.Low;
     }
 
     public async Task<Result<int>> ScanUserEmailAccountsAsync(
