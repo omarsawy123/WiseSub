@@ -20,6 +20,7 @@ This document describes all business flows in the WiseSub application. Each flow
 9. [User Data Management Flow (GDPR)](#9-user-data-management-flow-gdpr)
 10. [Vendor Metadata Flow](#10-vendor-metadata-flow)
 11. [Subscription Tier Management Flow](#11-subscription-tier-management-flow)
+12. [Stripe Payment Integration Flow](#12-stripe-payment-integration-flow)
 
 ---
 
@@ -1170,19 +1171,21 @@ NAME NORMALIZATION:
 ## 11. Subscription Tier Management Flow
 
 ### Overview
-Manages user subscription tiers (Free/Paid), enforces limits, controls feature access, and handles upgrades/downgrades while preserving user data.
+Manages user subscription tiers (Free/Pro/Premium), enforces limits, controls feature access, and handles upgrades/downgrades while preserving user data.
 
 ### Components
 - `TierService` - Business logic for tier management
+- `FeatureAccessService` - Centralized feature access control
 - `UserRepository` - User data access
 - `EmailAccountRepository` - Email account counting
 - `SubscriptionRepository` - Subscription counting
 
 ### Tier Limits
-| Tier | Email Accounts | Subscriptions | Features |
-|------|----------------|---------------|----------|
-| Free | 1 | 5 | Basic dashboard |
-| Paid | Unlimited | Unlimited | All features (PDF export, Cancellation Assistant) |
+| Tier | Email Accounts | Subscriptions | AI Scanning | Key Features |
+|------|----------------|---------------|-------------|--------------|
+| Free | 1 | 5 | ❌ | Basic dashboard, 7-day alerts |
+| Pro | 3 | Unlimited | ✅ | AI scanning, PDF export (monthly), spending insights |
+| Premium | Unlimited | Unlimited | ✅ | All features, cancellation assistant, real-time scanning |
 
 ### Flow Diagram
 
@@ -1232,27 +1235,65 @@ Manages user subscription tiers (Free/Paid), enforces limits, controls feature a
        ▼                                                          ▼
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         FREE TIER LIMITS                                     │
+│                         FREE TIER ($0/month)                                 │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  Max Email Accounts: 1                                              │   │
 │  │  Max Subscriptions: 5                                               │   │
-│  │  Cancellation Assistant: ❌ Not Available                           │   │
+│  │  AI Email Scanning: ❌ Not Available                                │   │
+│  │  Renewal Alerts (7-day): ✅ Available                               │   │
+│  │  Renewal Alerts (3-day): ❌ Not Available                           │   │
+│  │  Price Change Alerts: ❌ Not Available                              │   │
+│  │  Spending Insights: ❌ Not Available                                │   │
 │  │  PDF Export: ❌ Not Available                                       │   │
-│  │  Advanced Insights: ❌ Not Available                                │   │
+│  │  Cancellation Assistant: ❌ Not Available                           │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         PAID TIER FEATURES                                   │
+│                         PRO TIER ($15/month)                                 │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Max Email Accounts: 3                                              │   │
+│  │  Max Subscriptions: Unlimited                                       │   │
+│  │  AI Email Scanning: ✅ Available                                    │   │
+│  │  Initial 12-month Scan: ✅ Available                                │   │
+│  │  Real-time Scanning: ❌ Not Available                               │   │
+│  │  All Renewal Alerts: ✅ Available (7-day, 3-day)                    │   │
+│  │  Price Change Alerts: ✅ Available                                  │   │
+│  │  Trial Ending Alerts: ✅ Available                                  │   │
+│  │  Unused Subscription Alerts: ✅ Available                           │   │
+│  │  Spending by Category: ✅ Available                                 │   │
+│  │  Renewal Timeline: ✅ Available                                     │   │
+│  │  PDF Export: ✅ Monthly                                             │   │
+│  │  Savings Tracker: ✅ Available                                      │   │
+│  │  Cancellation Assistant: ❌ Not Available                           │   │
+│  │  Custom Categories: ❌ Not Available                                │   │
+│  │  Custom Alert Timing: ❌ Not Available                              │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PREMIUM TIER ($25/month)                             │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  Max Email Accounts: Unlimited                                      │   │
 │  │  Max Subscriptions: Unlimited                                       │   │
+│  │  AI Email Scanning: ✅ Available                                    │   │
+│  │  Initial 12-month Scan: ✅ Available                                │   │
+│  │  Real-time Scanning: ✅ Available                                   │   │
+│  │  All Alerts: ✅ Available (with custom timing)                      │   │
+│  │  Daily Digest Option: ✅ Available                                  │   │
+│  │  All Spending Insights: ✅ Available                                │   │
+│  │  Spending Benchmarks: ✅ Available                                  │   │
+│  │  Spending Forecasts: ✅ Available                                   │   │
+│  │  PDF Export: ✅ Unlimited                                           │   │
 │  │  Cancellation Assistant: ✅ Available                               │   │
-│  │  PDF Export: ✅ Available                                           │   │
-│  │  Advanced Insights: ✅ Available                                    │   │
+│  │  Cancellation Templates: ✅ Available                               │   │
+│  │  Custom Categories: ✅ Available                                    │   │
+│  │  Duplicate Detection: ✅ Available                                  │   │
 │  │  Unlimited History: ✅ Available                                    │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
@@ -1264,26 +1305,41 @@ Manages user subscription tiers (Free/Paid), enforces limits, controls feature a
 
   Frontend                   TierService                    Database
        │                          │                            │
-       │  1. UpgradeToPaydAsync   │                            │
-       │     (userId)             │                            │
+       │  1. UpgradeToTierAsync   │                            │
+       │     (userId, targetTier) │                            │
        │─────────────────────────>│                            │
        │                          │                            │
        │                          │  2. Get user               │
        │                          │─────────────────────────────>│
        │                          │<─────────────────────────────│
        │                          │                            │
-       │                          │  3. Check current tier     │
+       │                          │  3. Validate upgrade path  │
+       │                          │     (can only go up)       │
        │                          │                            │
-       │                          │  4. If Free → Update to Paid│
+       │                          │  4. Update tier            │
+       │                          │     Free→Pro or Pro→Premium│
        │                          │─────────────────────────────>│
        │                          │<─────────────────────────────│
        │                          │                            │
        │  5. Success              │                            │
-       │     (All features now    │                            │
-       │      accessible)         │                            │
+       │     (New tier features   │                            │
+       │      now accessible)     │                            │
        │<─────────────────────────│                            │
        │                          │                            │
        ▼                          ▼                            ▼
+
+UPGRADE PATHS:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│    ┌────────┐     ┌────────┐     ┌──────────┐                              │
+│    │  Free  │────>│  Pro   │────>│ Premium  │                              │
+│    │  $0    │     │  $15   │     │   $25    │                              │
+│    └────────┘     └────────┘     └──────────┘                              │
+│         │                                │                                   │
+│         └────────────────────────────────┘                                   │
+│              (Direct upgrade also allowed)                                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 
 ═══════════════════════════════════════════════════════════════════════════════
                          DOWNGRADE FLOW (Data Preserved)
@@ -1314,11 +1370,13 @@ Manages user subscription tiers (Free/Paid), enforces limits, controls feature a
 DATA PRESERVATION ON DOWNGRADE:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│  ✅ All email accounts preserved (but can't add new ones)                   │
-│  ✅ All subscriptions preserved (but can't add new ones)                    │
+│  ✅ All email accounts preserved (but can't add new beyond tier limit)      │
+│  ✅ All subscriptions preserved (but can't add new beyond tier limit)       │
 │  ✅ All alerts preserved                                                     │
 │  ✅ All history preserved                                                    │
-│  ❌ Premium features disabled (PDF export, Cancellation Assistant)          │
+│  ❌ Higher-tier features disabled based on new tier:                        │
+│     - Free: AI scanning, advanced alerts, insights, PDF export disabled     │
+│     - Pro: Cancellation assistant, real-time scanning, benchmarks disabled  │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -1338,6 +1396,279 @@ USAGE TRACKING:
 │  │    "isAtEmailLimit": true,                                          │   │
 │  │    "isAtSubscriptionLimit": false                                   │   │
 │  │  }                                                                   │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 12. Stripe Payment Integration Flow
+
+### Overview
+Users can upgrade their subscription tier through Stripe checkout. The system handles checkout session creation, webhook events for payment completion, subscription updates, and cancellations.
+
+### Components
+- `StripeService` - Payment processing
+- `IStripeService` - Service interface
+- `StripeConfiguration` - Configuration settings
+- `UserRepository` - User data updates
+
+### Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/pricing/tiers` | Get all available pricing tiers |
+| GET | `/api/pricing/current` | Get user's current tier and usage |
+| POST | `/api/pricing/checkout` | Create Stripe checkout session |
+| POST | `/api/pricing/portal` | Create billing portal session |
+| POST | `/api/pricing/upgrade` | Upgrade/change tier (with proration) |
+| POST | `/api/pricing/downgrade` | Downgrade to free tier |
+| POST | `/api/pricing/webhooks` | Handle Stripe webhook events |
+
+### Configuration
+```json
+{
+  "Stripe": {
+    "SecretKey": "sk_test_...",
+    "PublishableKey": "pk_test_...",
+    "WebhookSecret": "whsec_...",
+    "PriceIds": {
+      "ProMonthly": "price_pro_monthly",
+      "ProAnnual": "price_pro_annual",
+      "PremiumMonthly": "price_premium_monthly",
+      "PremiumAnnual": "price_premium_annual"
+    }
+  }
+}
+```
+
+### Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      STRIPE CHECKOUT FLOW                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  Frontend                   Backend                      Stripe
+     │                          │                            │
+     │  1. Click "Upgrade       │                            │
+     │     to Pro/Premium"      │                            │
+     │─────────────────────────>│                            │
+     │                          │                            │
+     │  2. POST /pricing/       │                            │
+     │     checkout             │                            │
+     │     {tier, isAnnual}     │                            │
+     │─────────────────────────>│                            │
+     │                          │                            │
+     │                          │  3. Get/Create Stripe      │
+     │                          │     Customer               │
+     │                          │───────────────────────────>│
+     │                          │<───────────────────────────│
+     │                          │                            │
+     │                          │  4. Create Checkout        │
+     │                          │     Session                │
+     │                          │───────────────────────────>│
+     │                          │<───────────────────────────│
+     │                          │                            │
+     │  5. Checkout URL         │                            │
+     │<─────────────────────────│                            │
+     │                          │                            │
+     │  6. Redirect to Stripe   │                            │
+     │──────────────────────────────────────────────────────>│
+     │                          │                            │
+     │  7. User completes       │                            │
+     │     payment              │                            │
+     │<──────────────────────────────────────────────────────│
+     │                          │                            │
+     │                          │  8. Webhook:               │
+     │                          │     checkout.session       │
+     │                          │     .completed             │
+     │                          │<───────────────────────────│
+     │                          │                            │
+     │                          │  9. Update User:           │
+     │                          │     - Tier = Pro/Premium   │
+     │                          │     - StripeSubscriptionId │
+     │                          │     - StripePriceId        │
+     │                          │     - SubscriptionDates    │
+     │                          │                            │
+     │  10. Redirect to         │                            │
+     │      success page        │                            │
+     │<──────────────────────────────────────────────────────│
+     │                          │                            │
+     ▼                          ▼                            ▼
+
+WEBHOOK EVENTS HANDLED:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  checkout.session.completed                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  - Extract userId from session metadata                             │   │
+│  │  - Update user tier based on targetTier metadata                    │   │
+│  │  - Store StripeSubscriptionId, StripePriceId                        │   │
+│  │  - Set SubscriptionStartDate, SubscriptionEndDate                   │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  customer.subscription.updated                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  - Update subscription period dates                                 │   │
+│  │  - Update tier if price changed                                     │   │
+│  │  - Handle plan changes (upgrade/downgrade)                          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  customer.subscription.deleted                                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  - Downgrade user to Free tier                                      │   │
+│  │  - Clear Stripe subscription fields                                 │   │
+│  │  - Preserve all user data (subscriptions, history)                  │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+BILLING PORTAL FLOW:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  Frontend                   Backend                      Stripe              │
+│     │                          │                            │                │
+│     │  POST /pricing/portal    │                            │                │
+│     │─────────────────────────>│                            │                │
+│     │                          │                            │                │
+│     │                          │  Create Portal Session     │                │
+│     │                          │───────────────────────────>│                │
+│     │                          │<───────────────────────────│                │
+│     │                          │                            │                │
+│     │  Portal URL              │                            │                │
+│     │<─────────────────────────│                            │                │
+│     │                          │                            │                │
+│     │  Redirect to Portal      │                            │                │
+│     │──────────────────────────────────────────────────────>│                │
+│     │                          │                            │                │
+│     │  User manages:           │                            │                │
+│     │  - Update payment method │                            │                │
+│     │  - View invoices         │                            │                │
+│     │  - Cancel subscription   │                            │                │
+│     │<──────────────────────────────────────────────────────│                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+UPGRADE/DOWNGRADE FLOW:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  UPGRADE (Pro → Premium or Free → Paid via checkout)                        │
+│                                                                              │
+│  Frontend                   Backend                      Stripe              │
+│     │                          │                            │                │
+│     │  POST /pricing/upgrade   │                            │                │
+│     │  {targetTier, isAnnual}  │                            │                │
+│     │─────────────────────────>│                            │                │
+│     │                          │                            │                │
+│     │                          │  Update Subscription       │                │
+│     │                          │  with new Price ID         │                │
+│     │                          │  (proration enabled)       │                │
+│     │                          │───────────────────────────>│                │
+│     │                          │<───────────────────────────│                │
+│     │                          │                            │                │
+│     │                          │  Get Upcoming Invoice      │                │
+│     │                          │  (for proration amount)    │                │
+│     │                          │───────────────────────────>│                │
+│     │                          │<───────────────────────────│                │
+│     │                          │                            │                │
+│     │                          │  Update User:              │                │
+│     │                          │  - Tier = NewTier          │                │
+│     │                          │  - StripePriceId           │                │
+│     │                          │  - IsAnnualBilling         │                │
+│     │                          │                            │                │
+│     │  TierChangeResult        │                            │                │
+│     │  {previousTier, newTier, │                            │                │
+│     │   proratedAmount}        │                            │                │
+│     │<─────────────────────────│                            │                │
+│                                                                              │
+│  Proration Logic:                                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  - Stripe automatically calculates proration for mid-cycle changes  │   │
+│  │  - User is charged/credited the difference immediately              │   │
+│  │  - New billing cycle starts from change date                        │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+DOWNGRADE FLOW:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  DOWNGRADE TO FREE TIER                                                      │
+│                                                                              │
+│  Frontend                   Backend                      Stripe              │
+│     │                          │                            │                │
+│     │  POST /pricing/downgrade │                            │                │
+│     │  {immediate: bool}       │                            │                │
+│     │─────────────────────────>│                            │                │
+│     │                          │                            │                │
+│     │                          │  If immediate = false:     │                │
+│     │                          │  Set CancelAtPeriodEnd     │                │
+│     │                          │───────────────────────────>│                │
+│     │                          │<───────────────────────────│                │
+│     │                          │                            │                │
+│     │                          │  If immediate = true:      │                │
+│     │                          │  Cancel Subscription       │                │
+│     │                          │───────────────────────────>│                │
+│     │                          │<───────────────────────────│                │
+│     │                          │                            │                │
+│     │                          │  Update User:              │                │
+│     │                          │  - Tier = Free             │                │
+│     │                          │  - Clear Stripe fields     │                │
+│     │                          │  - PRESERVE ALL DATA       │                │
+│     │                          │                            │                │
+│     │  DowngradeResponse       │                            │                │
+│     │<─────────────────────────│                            │                │
+│                                                                              │
+│  Data Preservation on Downgrade:                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  PRESERVED:                                                         │   │
+│  │  - All subscription records                                         │   │
+│  │  - Email account connections                                        │   │
+│  │  - Historical data and alerts                                       │   │
+│  │  - User preferences                                                 │   │
+│  │  - StripeCustomerId (for future upgrades)                           │   │
+│  │                                                                      │   │
+│  │  RESTRICTED:                                                         │   │
+│  │  - Features limited to Free tier                                    │   │
+│  │  - Email accounts beyond limit become inactive                      │   │
+│  │  - Subscriptions beyond limit still visible but read-only           │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CANCELLATION FLOW:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  Two cancellation modes:                                                     │
+│                                                                              │
+│  1. Cancel at Period End (cancelAtPeriodEnd = true)                         │
+│     ┌─────────────────────────────────────────────────────────────────┐    │
+│     │  - User keeps access until SubscriptionEndDate                  │    │
+│     │  - Stripe sends webhook at period end                           │    │
+│     │  - Then downgrade to Free tier                                  │    │
+│     └─────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  2. Cancel Immediately (cancelAtPeriodEnd = false)                          │
+│     ┌─────────────────────────────────────────────────────────────────┐    │
+│     │  - Immediate downgrade to Free tier                             │    │
+│     │  - Clear all Stripe subscription fields                         │    │
+│     │  - No refund (handled by Stripe policies)                       │    │
+│     └─────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+USER ENTITY STRIPE FIELDS:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  User                                                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  StripeCustomerId       - Stripe customer ID (cus_xxx)              │   │
+│  │  StripeSubscriptionId   - Active subscription ID (sub_xxx)          │   │
+│  │  StripePriceId          - Current price ID (price_xxx)              │   │
+│  │  SubscriptionStartDate  - Current period start                      │   │
+│  │  SubscriptionEndDate    - Current period end                        │   │
+│  │  IsAnnualBilling        - Monthly vs Annual billing                 │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1381,3 +1712,7 @@ USAGE TRACKING:
 | 2025-12-01 | Kiro | Initial creation with 9 business flows |
 | 2025-12-01 | Kiro | Added Vendor Metadata Flow (Task 13) |
 | 2025-12-01 | Kiro | Added Subscription Tier Management Flow (Task 14) |
+| 2025-12-01 | Kiro | Updated Tier Management to three-tier model (Free/Pro/Premium) (Task 14.4) |
+| 2025-12-01 | Kiro | Added FeatureAccessService for centralized feature access control (Task 14.5) |
+| 2025-12-01 | Kiro | Added Stripe Payment Integration Flow (Task 14.6) |
+| 2025-12-01 | Kiro | Added Upgrade/Downgrade Flow with proration support (Task 14.7) |

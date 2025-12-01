@@ -282,15 +282,113 @@
 
 
 - [ ] 14.2 Write property test for paid tier feature unlock
-
   - **Property 58: Paid tier feature unlock**
   - **Validates: Requirements 14.3**
 
-
 - [ ] 14.3 Write property test for downgrade data preservation
-
   - **Property 59: Downgrade data preservation**
   - **Validates: Requirements 14.4**
+
+- [x] 14.4 Implement three-tier pricing model (Free, Pro, Premium)
+
+
+
+
+
+  - Update SubscriptionTier enum to include Free, Pro, Premium tiers
+  - Update TierService with new tier limits:
+    - Free: 1 email account, 5 subscriptions, no AI scanning
+    - Pro: 3 email accounts, unlimited subscriptions, AI scanning enabled
+    - Premium: Unlimited email accounts, unlimited subscriptions, all features
+  - Add TierFeature flags for granular feature access control
+  - Implement feature gating methods in TierService
+  - _Requirements: 14.1, 14.2, 14.3_
+
+- [x] 14.5 Implement tier-specific feature access
+
+
+
+
+
+  - Add feature access checks for:
+    - AI Email Scanning (Pro+)
+    - Initial 12-month Scan (Pro+)
+    - Real-time Scanning (Premium only)
+    - Advanced Dashboard Filters (Pro+)
+    - Custom Categories (Premium only)
+    - 3-day Renewal Alerts (Pro+)
+    - Price Change Alerts (Pro+)
+    - Trial Ending Alerts (Pro+)
+    - Unused Subscription Alerts (Pro+)
+    - Custom Alert Timing (Premium only)
+    - Daily Digest Option (Premium only)
+    - Spending by Category insights (Pro+)
+    - Renewal Timeline (Pro+)
+    - Spending Benchmarks (Premium only)
+    - Spending Forecasts (Premium only)
+    - Cancellation Assistant (Premium only)
+    - PDF Export (Pro: Monthly, Premium: Unlimited)
+    - Savings Tracker (Pro+)
+    - Duplicate Detection (Premium only)
+  - Create FeatureAccessService to centralize feature checks
+  - _Requirements: 14.2, 14.3_
+
+- [x] 14.6 Implement Stripe payment integration
+
+
+
+
+
+  - Add Stripe NuGet package
+  - Create StripeService for payment processing
+  - Implement checkout session creation for tier upgrades
+  - Add webhook handlers for payment events (checkout.session.completed, customer.subscription.updated, customer.subscription.deleted)
+  - Store Stripe customer ID and subscription ID on User entity
+  - Add PriceId, SubscriptionStartDate, SubscriptionEndDate, IsAnnual fields to User
+  - _Requirements: 14.5_
+
+- [x] 14.7 Implement upgrade/downgrade flow
+
+
+
+
+
+  - Create upgrade endpoint to initiate Stripe checkout
+  - Create downgrade endpoint to switch to lower tier
+  - Implement proration logic for mid-cycle changes
+  - Handle annual vs monthly billing options
+  - Preserve user data on downgrade (restrict features, keep data)
+  - _Requirements: 14.3, 14.4_
+
+- [x] 14.8 Add pricing API endpoints
+
+
+
+
+
+  - Create PricingController with endpoints:
+    - GET /api/pricing/tiers - Get all tier details and features
+    - GET /api/pricing/current - Get user's current tier and usage
+    - POST /api/pricing/checkout - Create Stripe checkout session
+    - POST /api/pricing/portal - Create Stripe billing portal session
+    - POST /api/pricing/webhooks - Handle Stripe webhooks
+  - Add proper authorization and validation
+  - _Requirements: 14.1, 14.2, 14.3_
+
+- [ ] 14.9 Write property tests for tier feature access
+
+  - **Property 60: Feature access by tier**
+  - Test that Free tier users cannot access Pro/Premium features
+  - Test that Pro tier users can access Pro features but not Premium-only features
+  - Test that Premium tier users can access all features
+  - **Validates: Requirements 14.2, 14.3**
+
+- [ ] 14.10 Write unit tests for Stripe integration
+
+  - Test checkout session creation
+  - Test webhook event handling
+  - Test subscription status updates
+  - _Requirements: 14.5_
 
 - [ ] 15. Implement data privacy and GDPR compliance
   - Create DataExportService for JSON export
