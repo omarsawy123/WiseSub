@@ -2,6 +2,7 @@
 
 > **Last Updated**: December 1, 2025  
 > **Maintainer**: AI Agents must update this document when adding/modifying flows
+> **API Controllers**: AuthController, EmailAccountController, SubscriptionController, DashboardController, AlertController, UserController, PricingController, HealthController
 
 This document describes all business flows in the WiseSub application. Each flow includes an overview and ASCII diagram showing the sequence of operations.
 
@@ -117,18 +118,20 @@ TOKEN REFRESH FLOW:
 Users connect their Gmail accounts to allow subscription scanning. OAuth tokens are encrypted and stored for background processing.
 
 ### Components
-- `EmailAccountController` - API endpoints (planned)
+- `EmailAccountController` - API endpoints
 - `GmailClient` - Gmail API integration
 - `EmailAccountRepository` - Account storage
 - `TokenEncryptionService` - Token security
+- `TierService` - Tier limit enforcement
 
 ### Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/email-accounts/connect` | Connect Gmail account |
 | GET | `/api/email-accounts` | List connected accounts |
-| DELETE | `/api/email-accounts/{id}` | Disconnect account |
-| POST | `/api/email-accounts/{id}/refresh` | Refresh OAuth tokens |
+| GET | `/api/email-accounts/{id}` | Get specific account |
+| POST | `/api/email-accounts/connect` | Connect Gmail account |
+| POST | `/api/email-accounts/{id}/disconnect` | Disconnect account |
+| POST | `/api/email-accounts/{id}/scan` | Trigger manual scan |
 
 ### Flow Diagram
 
@@ -394,20 +397,24 @@ OpenAI classifies emails as subscription-related and extracts structured data. C
 Manages subscription lifecycle: creation, updates, deduplication, and archival. Handles both auto-detected and manually added subscriptions.
 
 ### Components
-- `SubscriptionController` - API endpoints (planned)
-- `SubscriptionService` - Business logic (planned)
+- `SubscriptionController` - API endpoints
+- `SubscriptionService` - Business logic
 - `SubscriptionRepository` - Data access
 - `VendorMetadataRepository` - Vendor matching
+- `TierService` - Tier limit enforcement
 
 ### Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/subscriptions` | List user subscriptions |
+| GET | `/api/subscriptions` | List user subscriptions (with filtering/sorting) |
 | GET | `/api/subscriptions/{id}` | Get subscription details |
 | POST | `/api/subscriptions` | Add manual subscription |
 | PUT | `/api/subscriptions/{id}` | Update subscription |
 | DELETE | `/api/subscriptions/{id}` | Archive subscription |
-| POST | `/api/subscriptions/{id}/confirm` | Confirm pending subscription |
+| GET | `/api/subscriptions/pending-review` | Get subscriptions needing review |
+| POST | `/api/subscriptions/{id}/approve` | Approve pending subscription |
+| POST | `/api/subscriptions/{id}/reject` | Reject pending subscription |
+| GET | `/api/subscriptions/upcoming` | Get upcoming renewals |
 
 ### Flow Diagram
 
@@ -514,9 +521,21 @@ SUBSCRIPTION STATES:
 System generates alerts for upcoming renewals, price changes, trial expirations, and unused subscriptions. Alerts are scheduled and processed by background jobs.
 
 ### Components
-- `AlertService` - Alert generation (planned)
+- `AlertController` - API endpoints
+- `AlertService` - Alert generation
 - `AlertRepository` - Alert storage
-- `AlertProcessorService` - Background worker (planned)
+- `AlertProcessorService` - Background worker
+
+### Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/alerts` | List user alerts (with filtering) |
+| GET | `/api/alerts/today` | Get today's alerts |
+| POST | `/api/alerts/{id}/snooze` | Snooze an alert |
+| POST | `/api/alerts/{id}/dismiss` | Dismiss an alert |
+| GET | `/api/alerts/preferences` | Get alert preferences |
+| PUT | `/api/alerts/preferences` | Update alert preferences |
+| POST | `/api/alerts/generate` | Manually trigger alert generation |
 
 ### Alert Types
 | Type | Trigger | Default Lead Time |

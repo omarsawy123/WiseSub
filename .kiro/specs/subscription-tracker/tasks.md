@@ -375,7 +375,12 @@
   - Add proper authorization and validation
   - _Requirements: 14.1, 14.2, 14.3_
 
-- [ ] 14.9 Write property tests for tier feature access
+- [x] 14.9 Write property tests for tier feature access
+
+
+
+
+
 
   - **Property 60: Feature access by tier**
   - Test that Free tier users cannot access Pro/Premium features
@@ -383,7 +388,17 @@
   - Test that Premium tier users can access all features
   - **Validates: Requirements 14.2, 14.3**
 
-- [ ] 14.10 Write unit tests for Stripe integration
+- [x] 14.10 Write unit tests for Stripe integration
+
+
+
+
+
+
+
+
+
+
 
   - Test checkout session creation
   - Test webhook event handling
@@ -406,7 +421,14 @@
   - **Property 38: GDPR data export**
   - **Validates: Requirements 8.5**
 
-- [ ] 16. Implement API controllers
+- [x] 16. Implement API controllers
+
+
+
+
+
+
+
   - Create AuthController (login, logout, token refresh)
   - Create EmailAccountController (connect, disconnect, list)
   - Create SubscriptionController (list, get, update, delete, manual add)
@@ -416,15 +438,24 @@
   - Add input validation and error handling
   - _Requirements: 1.1, 1.4, 1.5, 3.1, 3.5, 5.1_
 
-- [ ]* 16.1 Write property test for unified subscription aggregation
+- [x] 16.1 Write property test for unified subscription aggregation
+
+
+
   - **Property 32: Unified subscription aggregation**
   - **Validates: Requirements 7.1**
 
-- [ ]* 16.2 Write property test for subscription archival on disconnect
+- [x] 16.2 Write property test for subscription archival on disconnect
+
+
+
   - **Property 36: Subscription archival on disconnect**
   - **Validates: Requirements 7.5**
 
-- [ ] 17. Implement error handling and logging
+- [x] 17. Implement error handling and logging
+
+
+
   - Create global exception handler middleware
   - Implement structured error response format
   - Set up Serilog with console sink
@@ -457,7 +488,10 @@
   - **Property 53: Event tracking**
   - **Validates: Requirements 13.1**
 
-- [ ] 19. Set up API documentation with Swagger
+- [-] 19. Set up API documentation with Swagger
+
+
+
   - Install Swashbuckle
   - Configure Swagger UI
   - Add XML documentation comments to controllers
