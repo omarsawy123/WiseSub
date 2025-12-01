@@ -11,6 +11,7 @@ namespace WiseSub.API.Controllers;
 [ApiController]
 [Route("api/dashboard")]
 [Authorize]
+[Produces("application/json")]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboardService;

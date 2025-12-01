@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Threading.RateLimiting;
 using Hangfire;
@@ -6,6 +7,7 @@ using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Serilog;
 using Serilog.Events;
 using WiseSub.API.Middleware;
@@ -49,6 +51,64 @@ try
 
     // Add services to the container
     builder.Services.AddControllers();
+
+    // Configure Swagger/OpenAPI documentation
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("v1", new OpenApiInfo
+        {
+            Version = "v1",
+            Title = "WiseSub API",
+            Description = "Subscription Management System API - Automatically discover, track, and manage recurring subscriptions by analyzing email communications.",
+            Contact = new OpenApiContact
+            {
+                Name = "WiseSub Support",
+                Email = "support@wisesub.com"
+            },
+            License = new OpenApiLicense
+            {
+                Name = "MIT License"
+            }
+        });
+
+        // Add JWT Bearer authentication to Swagger
+        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.\r\n\r\nExample: \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"",
+            Name = "Authorization",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey,
+            Scheme = "Bearer",
+            BearerFormat = "JWT"
+        });
+
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        });
+
+        // Include XML comments for API documentation
+        var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+        var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+        if (File.Exists(xmlPath))
+        {
+            options.IncludeXmlComments(xmlPath);
+        }
+
+        // Enable annotations for better documentation
+        options.EnableAnnotations();
+    });
 
     // Add global exception handler
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -146,6 +206,20 @@ try
     var app = builder.Build();
 
     // Configure the HTTP request pipeline
+    
+    // Enable Swagger UI in development and production (for API documentation)
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "WiseSub API v1");
+        options.RoutePrefix = "swagger";
+        options.DocumentTitle = "WiseSub API Documentation";
+        options.DefaultModelsExpandDepth(2);
+        options.DefaultModelRendering(Swashbuckle.AspNetCore.SwaggerUI.ModelRendering.Model);
+        options.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.List);
+        options.EnableDeepLinking();
+        options.DisplayRequestDuration();
+    });
     
     // Add correlation ID middleware first to ensure all requests have a correlation ID
     app.UseCorrelationId();

@@ -488,7 +488,9 @@
   - **Property 53: Event tracking**
   - **Validates: Requirements 13.1**
 
-- [-] 19. Set up API documentation with Swagger
+- [x] 19. Set up API documentation with Swagger
+
+
 
 
 
@@ -499,7 +501,12 @@
   - Add authentication configuration to Swagger
   - _Requirements: NFR-5_
 
-- [ ] 20. Checkpoint - Ensure all backend tests pass
+- [x] 20. Checkpoint - Ensure all backend tests pass
+
+
+
+
+
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 21. Set up Next.js frontend project

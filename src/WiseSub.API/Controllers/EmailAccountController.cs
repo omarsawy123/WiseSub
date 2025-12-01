@@ -7,11 +7,12 @@ using WiseSub.Domain.Enums;
 namespace WiseSub.API.Controllers;
 
 /// <summary>
-/// Controller for managing email account connections
+/// Controller for managing email account connections via OAuth
 /// </summary>
 [ApiController]
 [Route("api/email-accounts")]
 [Authorize]
+[Produces("application/json")]
 public class EmailAccountController : ControllerBase
 {
     private readonly IEmailAccountRepository _emailAccountRepository;

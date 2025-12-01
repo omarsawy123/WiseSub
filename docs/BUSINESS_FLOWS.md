@@ -3,6 +3,7 @@
 > **Last Updated**: December 1, 2025  
 > **Maintainer**: AI Agents must update this document when adding/modifying flows
 > **API Controllers**: AuthController, EmailAccountController, SubscriptionController, DashboardController, AlertController, UserController, PricingController, HealthController
+> **API Documentation**: Available at `/swagger` endpoint (Swagger UI)
 
 This document describes all business flows in the WiseSub application. Each flow includes an overview and ASCII diagram showing the sequence of operations.
 
@@ -1735,3 +1736,4 @@ USER ENTITY STRIPE FIELDS:
 | 2025-12-01 | Kiro | Added FeatureAccessService for centralized feature access control (Task 14.5) |
 | 2025-12-01 | Kiro | Added Stripe Payment Integration Flow (Task 14.6) |
 | 2025-12-01 | Kiro | Added Upgrade/Downgrade Flow with proration support (Task 14.7) |
+| 2025-12-01 | Kiro | Added Swagger/OpenAPI documentation with JWT authentication support (Task 19) |

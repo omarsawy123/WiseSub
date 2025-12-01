@@ -11,6 +11,7 @@ namespace WiseSub.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+[Produces("application/json")]
 public class PricingController : ControllerBase
 {
     private readonly IStripeService _stripeService;

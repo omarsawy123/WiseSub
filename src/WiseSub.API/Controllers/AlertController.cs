@@ -8,11 +8,12 @@ using WiseSub.Domain.Enums;
 namespace WiseSub.API.Controllers;
 
 /// <summary>
-/// Controller for alert management and preferences
+/// Controller for alert management, preferences, and notification settings
 /// </summary>
 [ApiController]
 [Route("api/alerts")]
 [Authorize]
+[Produces("application/json")]
 public class AlertController : ControllerBase
 {
     private readonly IAlertService _alertService;

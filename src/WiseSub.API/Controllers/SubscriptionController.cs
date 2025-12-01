@@ -7,11 +7,12 @@ using WiseSub.Domain.Enums;
 namespace WiseSub.API.Controllers;
 
 /// <summary>
-/// Controller for subscription management operations
+/// Controller for subscription management operations including CRUD, filtering, and approval workflows
 /// </summary>
 [ApiController]
 [Route("api/subscriptions")]
 [Authorize]
+[Produces("application/json")]
 public class SubscriptionController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;

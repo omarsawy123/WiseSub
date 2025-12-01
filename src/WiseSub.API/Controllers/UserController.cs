@@ -7,11 +7,12 @@ using WiseSub.Domain.Entities;
 namespace WiseSub.API.Controllers;
 
 /// <summary>
-/// Controller for user profile and data management
+/// Controller for user profile, preferences, and GDPR data management
 /// </summary>
 [ApiController]
 [Route("api/users")]
 [Authorize]
+[Produces("application/json")]
 public class UserController : ControllerBase
 {
     private readonly IUserService _userService;
