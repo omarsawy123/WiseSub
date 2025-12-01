@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -51,7 +50,7 @@ public class GlobalExceptionHandlerTests
         // Arrange
         var httpContext = new DefaultHttpContext();
         httpContext.Response.Body = new MemoryStream();
-        var exception = new InvalidOperationException("Test exception");
+        var exception = new Exception("Test exception");
 
         // Act
         await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
@@ -89,7 +88,7 @@ public class GlobalExceptionHandlerTests
         var httpContext = new DefaultHttpContext();
         var responseStream = new MemoryStream();
         httpContext.Response.Body = responseStream;
-        var exception = new InvalidOperationException("Test exception message");
+        var exception = new Exception("Test exception message");
 
         // Act
         await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
@@ -105,6 +104,71 @@ public class GlobalExceptionHandlerTests
         Assert.Equal(500, problemDetails.GetProperty("status").GetInt32());
         Assert.Equal("Internal Server Error", problemDetails.GetProperty("title").GetString());
         Assert.Equal("Test exception message", problemDetails.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_WithException_IncludesCorrelationId()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["CorrelationId"] = "test-correlation-123";
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = new InvalidOperationException("Test exception");
+
+        // Act
+        await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.Equal("test-correlation-123", problemDetails.GetProperty("correlationId").GetString());
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_WithException_IncludesTimestamp()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = new InvalidOperationException("Test exception");
+
+        // Act
+        await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.True(problemDetails.TryGetProperty("timestamp", out var timestamp));
+        Assert.True(DateTime.TryParse(timestamp.GetString(), out _));
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_WithException_IncludesErrorCode()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = new InvalidOperationException("Test exception");
+
+        // Act
+        await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.Equal("INVALID_OPERATION", problemDetails.GetProperty("errorCode").GetString());
     }
 
     [Fact]
@@ -173,7 +237,7 @@ public class GlobalExceptionHandlerTests
         // Arrange
         var httpContext = new DefaultHttpContext();
         httpContext.Response.Body = new MemoryStream();
-        var exception = new InvalidOperationException("Database connection failed");
+        var exception = new Exception("Database connection failed");
 
         // Act
         var result = await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
@@ -207,6 +271,28 @@ public class GlobalExceptionHandlerTests
     }
 
     [Fact]
+    public async Task TryHandleAsync_InProduction_StillIncludesCorrelationId()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["CorrelationId"] = "prod-correlation-456";
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = new InvalidOperationException("Sensitive error");
+
+        // Act
+        await _productionHandler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.Equal("prod-correlation-456", problemDetails.GetProperty("correlationId").GetString());
+    }
+
+    [Fact]
     public async Task TryHandleAsync_InDevelopment_ShowsExceptionDetails()
     {
         // Arrange
@@ -227,5 +313,55 @@ public class GlobalExceptionHandlerTests
         Assert.Equal("Detailed error message", problemDetails.GetProperty("detail").GetString());
         Assert.True(problemDetails.TryGetProperty("exceptionType", out var exType));
         Assert.Equal("InvalidOperationException", exType.GetString());
+    }
+
+    [Theory]
+    [InlineData(typeof(ArgumentNullException), 400, "INVALID_ARGUMENT")]
+    [InlineData(typeof(ArgumentException), 400, "INVALID_ARGUMENT")]
+    [InlineData(typeof(UnauthorizedAccessException), 401, "UNAUTHORIZED")]
+    [InlineData(typeof(InvalidOperationException), 400, "INVALID_OPERATION")]
+    [InlineData(typeof(TimeoutException), 504, "TIMEOUT")]
+    [InlineData(typeof(HttpRequestException), 502, "EXTERNAL_SERVICE_ERROR")]
+    public async Task TryHandleAsync_MapsExceptionTypesToCorrectStatusCodes(Type exceptionType, int expectedStatusCode, string expectedErrorCode)
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = (Exception)Activator.CreateInstance(exceptionType, "Test message")!;
+
+        // Act
+        await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(expectedStatusCode, httpContext.Response.StatusCode);
+        
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.Equal(expectedErrorCode, problemDetails.GetProperty("errorCode").GetString());
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_WithoutCorrelationId_GeneratesNewOne()
+    {
+        // Arrange
+        var httpContext = new DefaultHttpContext();
+        var responseStream = new MemoryStream();
+        httpContext.Response.Body = responseStream;
+        var exception = new InvalidOperationException("Test exception");
+
+        // Act
+        await _handler.TryHandleAsync(httpContext, exception, CancellationToken.None);
+
+        // Assert
+        responseStream.Position = 0;
+        var reader = new StreamReader(responseStream);
+        var responseBody = await reader.ReadToEndAsync();
+        
+        var problemDetails = JsonSerializer.Deserialize<JsonElement>(responseBody);
+        Assert.True(problemDetails.TryGetProperty("correlationId", out var correlationId));
+        Assert.False(string.IsNullOrEmpty(correlationId.GetString()));
     }
 }

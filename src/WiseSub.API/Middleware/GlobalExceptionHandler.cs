@@ -20,6 +20,7 @@ namespace WiseSub.API.Middleware;
 /// 
 /// Returns appropriate HTTP responses based on exception type with detailed logging.
 /// In production, exception details are hidden to prevent information disclosure.
+/// Includes correlation IDs for request tracing across distributed systems.
 /// </summary>
 public class GlobalExceptionHandler : IExceptionHandler
 {
@@ -37,12 +38,16 @@ public class GlobalExceptionHandler : IExceptionHandler
         Exception exception,
         CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId(httpContext);
+        
         _logger.LogError(
             exception,
-            "Exception occurred: {Message}",
+            "Exception occurred. CorrelationId: {CorrelationId}, Path: {Path}, Message: {Message}",
+            correlationId,
+            httpContext.Request.Path,
             exception.Message);
 
-        var problemDetails = CreateProblemDetails(httpContext, exception);
+        var problemDetails = CreateProblemDetails(httpContext, exception, correlationId);
 
         httpContext.Response.StatusCode = problemDetails.Status ?? StatusCodes.Status500InternalServerError;
 
@@ -51,10 +56,9 @@ public class GlobalExceptionHandler : IExceptionHandler
         return true;
     }
 
-    private ProblemDetails CreateProblemDetails(HttpContext httpContext, Exception exception)
+    private ProblemDetails CreateProblemDetails(HttpContext httpContext, Exception exception, string correlationId)
     {
-        var statusCode = StatusCodes.Status500InternalServerError;
-        var title = "Internal Server Error";
+        var (statusCode, errorCode, title) = MapExceptionToResponse(exception);
 
         var problemDetails = new ProblemDetails
         {
@@ -63,6 +67,11 @@ public class GlobalExceptionHandler : IExceptionHandler
             Instance = httpContext.Request.Path,
             Type = $"https://httpstatuses.io/{statusCode}"
         };
+
+        // Always include correlation ID and timestamp for tracing
+        problemDetails.Extensions["correlationId"] = correlationId;
+        problemDetails.Extensions["timestamp"] = DateTime.UtcNow.ToString("O");
+        problemDetails.Extensions["errorCode"] = errorCode;
 
         // Only expose exception details in development to prevent information disclosure
         if (_environment.IsDevelopment())
@@ -77,5 +86,30 @@ public class GlobalExceptionHandler : IExceptionHandler
         }
 
         return problemDetails;
+    }
+
+    private static (int StatusCode, string ErrorCode, string Title) MapExceptionToResponse(Exception exception)
+    {
+        return exception switch
+        {
+            ArgumentNullException => (StatusCodes.Status400BadRequest, "INVALID_ARGUMENT", "Bad Request"),
+            ArgumentException => (StatusCodes.Status400BadRequest, "INVALID_ARGUMENT", "Bad Request"),
+            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "UNAUTHORIZED", "Unauthorized"),
+            InvalidOperationException => (StatusCodes.Status400BadRequest, "INVALID_OPERATION", "Invalid Operation"),
+            TimeoutException => (StatusCodes.Status504GatewayTimeout, "TIMEOUT", "Gateway Timeout"),
+            HttpRequestException => (StatusCodes.Status502BadGateway, "EXTERNAL_SERVICE_ERROR", "External Service Error"),
+            OperationCanceledException => (StatusCodes.Status499ClientClosedRequest, "REQUEST_CANCELLED", "Request Cancelled"),
+            _ => (StatusCodes.Status500InternalServerError, "INTERNAL_ERROR", "Internal Server Error")
+        };
+    }
+
+    private static string GetCorrelationId(HttpContext httpContext)
+    {
+        if (httpContext.Items.TryGetValue("CorrelationId", out var correlationId) && correlationId is string id)
+        {
+            return id;
+        }
+        
+        return Guid.NewGuid().ToString("N")[..12];
     }
 }

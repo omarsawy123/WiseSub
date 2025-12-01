@@ -10,6 +10,7 @@ using WiseSub.Infrastructure.Data;
 using WiseSub.Infrastructure.Email;
 using WiseSub.Infrastructure.Payments;
 using WiseSub.Infrastructure.Repositories;
+using WiseSub.Infrastructure.Resilience;
 using WiseSub.Infrastructure.Security;
 
 namespace WiseSub.Infrastructure;
@@ -44,6 +45,9 @@ public static class DependencyInjection
 
         // Register encryption service for OAuth tokens
         services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
+
+        // Register circuit breaker service for external service resilience
+        services.AddSingleton<ICircuitBreakerService, CircuitBreakerService>();
 
         // Register repositories
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
