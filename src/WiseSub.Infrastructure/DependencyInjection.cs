@@ -8,6 +8,7 @@ using WiseSub.Infrastructure.AI;
 using WiseSub.Infrastructure.Authentication;
 using WiseSub.Infrastructure.Data;
 using WiseSub.Infrastructure.Email;
+using WiseSub.Infrastructure.Payments;
 using WiseSub.Infrastructure.Repositories;
 using WiseSub.Infrastructure.Security;
 
@@ -75,6 +76,11 @@ public static class DependencyInjection
         // Register AI services
         services.AddSingleton<IOpenAIClient, OpenAIClient>();
         services.AddScoped<IAIExtractionService, AIExtractionService>();
+
+        // Register Stripe payment services
+        services.Configure<StripeConfiguration>(
+            configuration.GetSection("Stripe"));
+        services.AddScoped<IStripeService, StripeService>();
 
         return services;
     }

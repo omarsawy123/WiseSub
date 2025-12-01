@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IAlertService, AlertService>();
         services.AddScoped<IVendorMetadataService, VendorMetadataService>();
         services.AddScoped<ITierService, TierService>();
+        services.AddScoped<IFeatureAccessService, FeatureAccessService>();
 
         return services;
     }

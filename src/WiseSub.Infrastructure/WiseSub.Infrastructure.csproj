@@ -23,6 +23,7 @@
     <PackageReference Include="Google.Apis.Gmail.v1" Version="1.69.0.3742" />
     <PackageReference Include="Google.Apis.Auth" Version="1.69.0" />
     <PackageReference Include="OpenAI" Version="2.1.0" />
+    <PackageReference Include="Stripe.net" Version="47.2.0" />
   </ItemGroup>
 
   <PropertyGroup>
