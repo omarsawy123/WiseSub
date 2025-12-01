@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IAlertService, AlertService>();
         services.AddScoped<IVendorMetadataService, VendorMetadataService>();
+        services.AddScoped<ITierService, TierService>();
 
         return services;
     }

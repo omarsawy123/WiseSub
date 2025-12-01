@@ -259,28 +259,32 @@
 
 
 
-- [ ] 13.2 Write property test for fallback to service name
-
+- [x] 13.2 Write property test for fallback to service name
   - **Property 46: Fallback to service name**
   - **Validates: Requirements 10.3**
 
-- [ ] 14. Implement subscription tier management
+- [x] 14. Implement subscription tier management
+
   - Add tier validation in SubscriptionService
+
   - Implement free tier limits (1 email account, 5 subscriptions)
   - Create upgrade/downgrade logic
   - Add feature access control based on tier
   - Implement upgrade prompts when limits reached
   - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [ ] 14.1 Write property test for free tier limit enforcement
+- [x] 14.1 Write property test for free tier limit enforcement
+
 
   - **Property 57: Free tier limit enforcement**
   - **Validates: Requirements 14.2**
+
 
 - [ ] 14.2 Write property test for paid tier feature unlock
 
   - **Property 58: Paid tier feature unlock**
   - **Validates: Requirements 14.3**
+
 
 - [ ] 14.3 Write property test for downgrade data preservation
 
