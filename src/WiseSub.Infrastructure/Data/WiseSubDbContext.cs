@@ -27,10 +27,15 @@ public class WiseSubDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Email).IsUnique();
+            entity.HasIndex(e => e.StripeCustomerId);
+            entity.HasIndex(e => e.StripeSubscriptionId);
             entity.Property(e => e.Email).IsRequired();
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.OAuthProvider).IsRequired();
             entity.Property(e => e.OAuthSubjectId).IsRequired();
+            entity.Property(e => e.StripeCustomerId).HasMaxLength(255);
+            entity.Property(e => e.StripeSubscriptionId).HasMaxLength(255);
+            entity.Property(e => e.StripePriceId).HasMaxLength(255);
         });
 
         // EmailAccount configuration

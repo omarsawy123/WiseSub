@@ -29,8 +29,14 @@ public interface ITierService
     Task<Result<bool>> HasFeatureAccessAsync(string userId, TierFeature feature, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Upgrades a user to a paid tier
+    /// Upgrades a user to a specific tier
     /// </summary>
+    Task<Result> UpgradeToTierAsync(string userId, SubscriptionTier targetTier, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Upgrades a user to Pro tier (legacy method for backward compatibility)
+    /// </summary>
+    [Obsolete("Use UpgradeToTierAsync instead")]
     Task<Result> UpgradeToPaydAsync(string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -55,9 +61,38 @@ public interface ITierService
 public record TierLimits(
     int MaxEmailAccounts,
     int MaxSubscriptions,
+    bool HasAiScanning,
+    bool HasInitial12MonthScan,
+    bool HasRealTimeScanning,
+    bool HasAdvancedFilters,
+    bool HasCustomCategories,
+    bool Has3DayRenewalAlerts,
+    bool HasPriceChangeAlerts,
+    bool HasTrialEndingAlerts,
+    bool HasUnusedSubscriptionAlerts,
+    bool HasCustomAlertTiming,
+    bool HasDailyDigest,
+    bool HasSpendingByCategory,
+    bool HasRenewalTimeline,
+    bool HasSpendingBenchmarks,
+    bool HasSpendingForecasts,
     bool HasCancellationAssistant,
+    bool HasCancellationTemplates,
     bool HasPdfExport,
+    PdfExportLimit PdfExportLimit,
+    bool HasSavingsTracker,
+    bool HasDuplicateDetection,
     bool HasUnlimitedHistory);
+
+/// <summary>
+/// PDF export limit type
+/// </summary>
+public enum PdfExportLimit
+{
+    None,
+    Monthly,
+    Unlimited
+}
 
 /// <summary>
 /// Current tier usage for a user
@@ -75,8 +110,37 @@ public record TierUsage(
 /// </summary>
 public enum TierFeature
 {
+    // Entry features
+    AiScanning,
+    Initial12MonthScan,
+    RealTimeScanning,
+
+    // Dashboard features
+    AdvancedFilters,
+    CustomCategories,
+
+    // Alert features
+    ThreeDayRenewalAlerts,
+    PriceChangeAlerts,
+    TrialEndingAlerts,
+    UnusedSubscriptionAlerts,
+    CustomAlertTiming,
+    DailyDigest,
+
+    // Insight features
+    SpendingByCategory,
+    RenewalTimeline,
+    SpendingBenchmarks,
+    SpendingForecasts,
+
+    // Tool features
     CancellationAssistant,
+    CancellationTemplates,
     PdfExport,
+    SavingsTracker,
+    DuplicateDetection,
+
+    // Legacy features (for backward compatibility)
     UnlimitedEmailAccounts,
     UnlimitedSubscriptions,
     AdvancedInsights
@@ -90,5 +154,10 @@ public enum TierOperation
     AddEmailAccount,
     AddSubscription,
     ExportPdf,
-    UseCancellationAssistant
+    UseCancellationAssistant,
+    UseAiScanning,
+    UseRealTimeScanning,
+    UseCustomCategories,
+    UseCustomAlertTiming,
+    UseDuplicateDetection
 }

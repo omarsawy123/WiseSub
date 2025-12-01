@@ -10,8 +10,9 @@ namespace WiseSub.Application.Tests.Services;
 
 /// <summary>
 /// Property tests for TierService
-/// Covers Task 14.1 (free tier limit enforcement), Task 14.2 (paid tier feature unlock),
-/// and Task 14.3 (downgrade data preservation)
+/// Covers three-tier pricing model: Free, Pro, Premium
+/// Task 14.1 (free tier limit enforcement), Task 14.2 (paid tier feature unlock),
+/// Task 14.3 (downgrade data preservation), Task 14.4 (three-tier model)
 /// </summary>
 public class TierServiceTests
 {
@@ -107,6 +108,7 @@ public class TierServiceTests
         result.ErrorMessage.Should().Contain("TierLimitExceeded");
     }
 
+
     /// <summary>
     /// Feature: subscription-tracker, Property 57: Free tier limit enforcement
     /// Verifies free tier users can add subscriptions when under limit
@@ -161,63 +163,270 @@ public class TierServiceTests
         // Assert
         limits.MaxEmailAccounts.Should().Be(1);
         limits.MaxSubscriptions.Should().Be(5);
+        limits.HasAiScanning.Should().BeFalse();
         limits.HasCancellationAssistant.Should().BeFalse();
         limits.HasPdfExport.Should().BeFalse();
     }
 
     #endregion
 
-    #region Task 14.2 - Property 58: Paid Tier Feature Unlock
+    #region Task 14.4 - Three-Tier Model: Pro Tier
 
     /// <summary>
-    /// Feature: subscription-tracker, Property 58: Paid tier feature unlock
-    /// For any user upgrade from Free to Paid tier, all paid features SHALL be immediately accessible
-    /// Validates: Requirements 14.3
+    /// Feature: subscription-tracker, Property 58: Pro tier feature unlock
+    /// Verifies Pro tier limits are correctly defined (3 email accounts, unlimited subscriptions)
+    /// Validates: Requirements 14.2, 14.3
     /// </summary>
     [Fact]
-    public async Task UpgradeToPaid_UnlocksAllPaidFeatures()
+    public void GetTierLimits_ProTier_ReturnsCorrectLimits()
     {
-        // Arrange
-        var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Free };
-        
-        _mockUserRepository
-            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(user);
-
-        _mockUserRepository
-            .Setup(r => r.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
         // Act
-        var result = await _service.UpgradeToPaydAsync(userId);
+        var limits = _service.GetTierLimits(SubscriptionTier.Pro);
 
         // Assert
-        result.IsSuccess.Should().BeTrue();
-        user.Tier.Should().Be(SubscriptionTier.Paid);
-        
-        _mockUserRepository.Verify(
-            r => r.UpdateAsync(It.Is<User>(u => u.Tier == SubscriptionTier.Paid), It.IsAny<CancellationToken>()),
-            Times.Once);
+        limits.MaxEmailAccounts.Should().Be(3);
+        limits.MaxSubscriptions.Should().Be(int.MaxValue);
+        limits.HasAiScanning.Should().BeTrue();
+        limits.HasInitial12MonthScan.Should().BeTrue();
+        limits.HasRealTimeScanning.Should().BeFalse();
+        limits.HasAdvancedFilters.Should().BeTrue();
+        limits.HasCustomCategories.Should().BeFalse();
+        limits.Has3DayRenewalAlerts.Should().BeTrue();
+        limits.HasPriceChangeAlerts.Should().BeTrue();
+        limits.HasTrialEndingAlerts.Should().BeTrue();
+        limits.HasUnusedSubscriptionAlerts.Should().BeTrue();
+        limits.HasCustomAlertTiming.Should().BeFalse();
+        limits.HasDailyDigest.Should().BeFalse();
+        limits.HasSpendingByCategory.Should().BeTrue();
+        limits.HasRenewalTimeline.Should().BeTrue();
+        limits.HasSpendingBenchmarks.Should().BeFalse();
+        limits.HasSpendingForecasts.Should().BeFalse();
+        limits.HasCancellationAssistant.Should().BeFalse();
+        limits.HasPdfExport.Should().BeTrue();
+        limits.PdfExportLimit.Should().Be(PdfExportLimit.Monthly);
+        limits.HasSavingsTracker.Should().BeTrue();
+        limits.HasDuplicateDetection.Should().BeFalse();
     }
 
     /// <summary>
-    /// Feature: subscription-tracker, Property 58: Paid tier feature unlock
-    /// Verifies paid tier has unlimited email accounts
-    /// Validates: Requirements 14.3
+    /// Feature: subscription-tracker, Property 58: Pro tier feature unlock
+    /// Verifies Pro tier allows up to 3 email accounts
+    /// Validates: Requirements 14.2
     /// </summary>
-    [Fact]
-    public async Task ValidateOperation_PaidTier_AllowsUnlimitedEmailAccounts()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ValidateOperation_ProTierUnderEmailLimit_ReturnsSuccess(int currentCount)
     {
         // Arrange
         var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Paid };
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
         
         _mockUserRepository
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // 10 active email accounts (would exceed free tier)
+        var emailAccounts = Enumerable.Range(1, currentCount)
+            .Select(i => new EmailAccount { Id = $"email-{i}", IsActive = true })
+            .ToList();
+        
+        _mockEmailAccountRepository
+            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(emailAccounts);
+
+        _mockSubscriptionRepository
+            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Subscription>());
+
+        // Act
+        var result = await _service.ValidateOperationAsync(userId, TierOperation.AddEmailAccount);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Pro tier feature unlock
+    /// Verifies Pro tier blocks adding 4th email account
+    /// Validates: Requirements 14.2
+    /// </summary>
+    [Fact]
+    public async Task ValidateOperation_ProTierAtEmailLimit_ReturnsFailure()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // 3 active email accounts (at limit for Pro tier)
+        var emailAccounts = Enumerable.Range(1, 3)
+            .Select(i => new EmailAccount { Id = $"email-{i}", IsActive = true })
+            .ToList();
+        
+        _mockEmailAccountRepository
+            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(emailAccounts);
+
+        _mockSubscriptionRepository
+            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Subscription>());
+
+        // Act
+        var result = await _service.ValidateOperationAsync(userId, TierOperation.AddEmailAccount);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.ErrorMessage.Should().Contain("TierLimitExceeded");
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Pro tier feature unlock
+    /// Verifies Pro tier has unlimited subscriptions
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task ValidateOperation_ProTier_AllowsUnlimitedSubscriptions()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        _mockEmailAccountRepository
+            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<EmailAccount>());
+
+        // 100 active subscriptions
+        var subscriptions = Enumerable.Range(1, 100)
+            .Select(i => new Subscription { Id = $"sub-{i}", Status = SubscriptionStatus.Active })
+            .ToList();
+        
+        _mockSubscriptionRepository
+            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(subscriptions);
+
+        // Act
+        var result = await _service.ValidateOperationAsync(userId, TierOperation.AddSubscription);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Pro tier feature unlock
+    /// Verifies Pro tier has AI scanning enabled
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task HasFeatureAccess_ProTier_HasAiScanning()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        var result = await _service.HasFeatureAccessAsync(userId, TierFeature.AiScanning);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Pro tier feature unlock
+    /// Verifies Pro tier does NOT have cancellation assistant
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task HasFeatureAccess_ProTier_NoCancellationAssistant()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        var result = await _service.HasFeatureAccessAsync(userId, TierFeature.CancellationAssistant);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeFalse();
+    }
+
+    #endregion
+
+
+    #region Task 14.4 - Three-Tier Model: Premium Tier
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Premium tier feature unlock
+    /// Verifies Premium tier limits are correctly defined (unlimited everything)
+    /// Validates: Requirements 14.2, 14.3
+    /// </summary>
+    [Fact]
+    public void GetTierLimits_PremiumTier_ReturnsUnlimitedLimits()
+    {
+        // Act
+        var limits = _service.GetTierLimits(SubscriptionTier.Premium);
+
+        // Assert
+        limits.MaxEmailAccounts.Should().Be(int.MaxValue);
+        limits.MaxSubscriptions.Should().Be(int.MaxValue);
+        limits.HasAiScanning.Should().BeTrue();
+        limits.HasInitial12MonthScan.Should().BeTrue();
+        limits.HasRealTimeScanning.Should().BeTrue();
+        limits.HasAdvancedFilters.Should().BeTrue();
+        limits.HasCustomCategories.Should().BeTrue();
+        limits.Has3DayRenewalAlerts.Should().BeTrue();
+        limits.HasPriceChangeAlerts.Should().BeTrue();
+        limits.HasTrialEndingAlerts.Should().BeTrue();
+        limits.HasUnusedSubscriptionAlerts.Should().BeTrue();
+        limits.HasCustomAlertTiming.Should().BeTrue();
+        limits.HasDailyDigest.Should().BeTrue();
+        limits.HasSpendingByCategory.Should().BeTrue();
+        limits.HasRenewalTimeline.Should().BeTrue();
+        limits.HasSpendingBenchmarks.Should().BeTrue();
+        limits.HasSpendingForecasts.Should().BeTrue();
+        limits.HasCancellationAssistant.Should().BeTrue();
+        limits.HasCancellationTemplates.Should().BeTrue();
+        limits.HasPdfExport.Should().BeTrue();
+        limits.PdfExportLimit.Should().Be(PdfExportLimit.Unlimited);
+        limits.HasSavingsTracker.Should().BeTrue();
+        limits.HasDuplicateDetection.Should().BeTrue();
+        limits.HasUnlimitedHistory.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Premium tier feature unlock
+    /// Verifies Premium tier has unlimited email accounts
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task ValidateOperation_PremiumTier_AllowsUnlimitedEmailAccounts()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Premium };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // 10 active email accounts
         var emailAccounts = Enumerable.Range(1, 10)
             .Select(i => new EmailAccount { Id = $"email-{i}", IsActive = true })
             .ToList();
@@ -238,52 +447,16 @@ public class TierServiceTests
     }
 
     /// <summary>
-    /// Feature: subscription-tracker, Property 58: Paid tier feature unlock
-    /// Verifies paid tier has unlimited subscriptions
+    /// Feature: subscription-tracker, Property 58: Premium tier feature unlock
+    /// Verifies Premium tier has cancellation assistant
     /// Validates: Requirements 14.3
     /// </summary>
     [Fact]
-    public async Task ValidateOperation_PaidTier_AllowsUnlimitedSubscriptions()
+    public async Task HasFeatureAccess_PremiumTier_HasCancellationAssistant()
     {
         // Arrange
         var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Paid };
-        
-        _mockUserRepository
-            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(user);
-
-        _mockEmailAccountRepository
-            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<EmailAccount>());
-
-        // 100 active subscriptions (would exceed free tier)
-        var subscriptions = Enumerable.Range(1, 100)
-            .Select(i => new Subscription { Id = $"sub-{i}", Status = SubscriptionStatus.Active })
-            .ToList();
-        
-        _mockSubscriptionRepository
-            .Setup(r => r.GetByUserIdAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(subscriptions);
-
-        // Act
-        var result = await _service.ValidateOperationAsync(userId, TierOperation.AddSubscription);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-    }
-
-    /// <summary>
-    /// Feature: subscription-tracker, Property 58: Paid tier feature unlock
-    /// Verifies paid tier has access to cancellation assistant
-    /// Validates: Requirements 14.3
-    /// </summary>
-    [Fact]
-    public async Task HasFeatureAccess_PaidTier_HasCancellationAssistant()
-    {
-        // Arrange
-        var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Paid };
+        var user = new User { Id = userId, Tier = SubscriptionTier.Premium };
         
         _mockUserRepository
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
@@ -298,23 +471,23 @@ public class TierServiceTests
     }
 
     /// <summary>
-    /// Feature: subscription-tracker, Property 58: Paid tier feature unlock
-    /// Verifies paid tier has access to PDF export
+    /// Feature: subscription-tracker, Property 58: Premium tier feature unlock
+    /// Verifies Premium tier has real-time scanning (Premium-only feature)
     /// Validates: Requirements 14.3
     /// </summary>
     [Fact]
-    public async Task HasFeatureAccess_PaidTier_HasPdfExport()
+    public async Task HasFeatureAccess_PremiumTier_HasRealTimeScanning()
     {
         // Arrange
         var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Paid };
+        var user = new User { Id = userId, Tier = SubscriptionTier.Premium };
         
         _mockUserRepository
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         // Act
-        var result = await _service.HasFeatureAccessAsync(userId, TierFeature.PdfExport);
+        var result = await _service.HasFeatureAccessAsync(userId, TierFeature.RealTimeScanning);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -322,58 +495,36 @@ public class TierServiceTests
     }
 
     /// <summary>
-    /// Feature: subscription-tracker, Property 58: Paid tier feature unlock
-    /// Verifies free tier does NOT have access to paid features
+    /// Feature: subscription-tracker, Property 58: Premium tier feature unlock
+    /// Verifies Pro tier does NOT have real-time scanning
     /// Validates: Requirements 14.3
     /// </summary>
-    [Theory]
-    [InlineData(TierFeature.CancellationAssistant)]
-    [InlineData(TierFeature.PdfExport)]
-    public async Task HasFeatureAccess_FreeTier_DeniedPaidFeatures(TierFeature feature)
+    [Fact]
+    public async Task HasFeatureAccess_ProTier_NoRealTimeScanning()
     {
         // Arrange
         var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Free };
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
         
         _mockUserRepository
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         // Act
-        var result = await _service.HasFeatureAccessAsync(userId, feature);
+        var result = await _service.HasFeatureAccessAsync(userId, TierFeature.RealTimeScanning);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeFalse();
     }
 
-    /// <summary>
-    /// Feature: subscription-tracker, Property 58: Paid tier feature unlock
-    /// Verifies paid tier limits are correctly defined
-    /// Validates: Requirements 14.3
-    /// </summary>
-    [Fact]
-    public void GetTierLimits_PaidTier_ReturnsUnlimitedLimits()
-    {
-        // Act
-        var limits = _service.GetTierLimits(SubscriptionTier.Paid);
-
-        // Assert
-        limits.MaxEmailAccounts.Should().Be(int.MaxValue);
-        limits.MaxSubscriptions.Should().Be(int.MaxValue);
-        limits.HasCancellationAssistant.Should().BeTrue();
-        limits.HasPdfExport.Should().BeTrue();
-        limits.HasUnlimitedHistory.Should().BeTrue();
-    }
-
     #endregion
-
 
     #region Task 14.3 - Property 59: Downgrade Data Preservation
 
     /// <summary>
     /// Feature: subscription-tracker, Property 59: Downgrade data preservation
-    /// For any user downgrade from Paid to Free tier, all existing subscription data SHALL be preserved
+    /// For any user downgrade from Premium to Free tier, all existing subscription data SHALL be preserved
     /// Validates: Requirements 14.4
     /// </summary>
     [Fact]
@@ -381,7 +532,7 @@ public class TierServiceTests
     {
         // Arrange
         var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Paid };
+        var user = new User { Id = userId, Tier = SubscriptionTier.Premium };
         
         _mockUserRepository
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
@@ -489,6 +640,151 @@ public class TierServiceTests
 
     #endregion
 
+
+    #region Upgrade Tests
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Tier upgrade
+    /// Verifies upgrade from Free to Pro tier
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task UpgradeToTier_FreeToProTier_Success()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Free };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        _mockUserRepository
+            .Setup(r => r.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.UpgradeToTierAsync(userId, SubscriptionTier.Pro);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        user.Tier.Should().Be(SubscriptionTier.Pro);
+        
+        _mockUserRepository.Verify(
+            r => r.UpdateAsync(It.Is<User>(u => u.Tier == SubscriptionTier.Pro), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Tier upgrade
+    /// Verifies upgrade from Free to Premium tier
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task UpgradeToTier_FreeToPremiumTier_Success()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Free };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        _mockUserRepository
+            .Setup(r => r.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.UpgradeToTierAsync(userId, SubscriptionTier.Premium);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        user.Tier.Should().Be(SubscriptionTier.Premium);
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Tier upgrade
+    /// Verifies upgrade from Pro to Premium tier
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task UpgradeToTier_ProToPremiumTier_Success()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        _mockUserRepository
+            .Setup(r => r.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.UpgradeToTierAsync(userId, SubscriptionTier.Premium);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        user.Tier.Should().Be(SubscriptionTier.Premium);
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Tier upgrade
+    /// Verifies upgrade is idempotent
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task UpgradeToTier_AlreadyAtTier_ReturnsSuccess()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Pro };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        var result = await _service.UpgradeToTierAsync(userId, SubscriptionTier.Pro);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        
+        // Should not call update since already at tier
+        _mockUserRepository.Verify(
+            r => r.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// Feature: subscription-tracker, Property 58: Tier upgrade
+    /// Verifies downgrade via UpgradeToTierAsync is blocked
+    /// Validates: Requirements 14.3
+    /// </summary>
+    [Fact]
+    public async Task UpgradeToTier_DowngradeAttempt_ReturnsFailure()
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Premium };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        var result = await _service.UpgradeToTierAsync(userId, SubscriptionTier.Pro);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.ErrorMessage.Should().Contain("downgrade");
+    }
+
+    #endregion
+
     #region Edge Cases
 
     /// <summary>
@@ -507,32 +803,6 @@ public class TierServiceTests
 
         // Assert
         result.IsFailure.Should().BeTrue();
-    }
-
-    /// <summary>
-    /// Verifies upgrade is idempotent (calling twice doesn't cause issues)
-    /// </summary>
-    [Fact]
-    public async Task UpgradeToPaid_AlreadyPaid_ReturnsSuccess()
-    {
-        // Arrange
-        var userId = "user-123";
-        var user = new User { Id = userId, Tier = SubscriptionTier.Paid };
-        
-        _mockUserRepository
-            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(user);
-
-        // Act
-        var result = await _service.UpgradeToPaydAsync(userId);
-
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        
-        // Should not call update since already paid
-        _mockUserRepository.Verify(
-            r => r.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     /// <summary>
@@ -573,6 +843,33 @@ public class TierServiceTests
         // Assert
         result.IsSuccess.Should().BeTrue();
         result.Value.SubscriptionCount.Should().Be(3); // 2 Active + 1 PendingReview
+    }
+
+    /// <summary>
+    /// Verifies Free tier does NOT have access to Pro/Premium features
+    /// </summary>
+    [Theory]
+    [InlineData(TierFeature.AiScanning)]
+    [InlineData(TierFeature.CancellationAssistant)]
+    [InlineData(TierFeature.PdfExport)]
+    [InlineData(TierFeature.RealTimeScanning)]
+    [InlineData(TierFeature.SpendingByCategory)]
+    public async Task HasFeatureAccess_FreeTier_DeniedPaidFeatures(TierFeature feature)
+    {
+        // Arrange
+        var userId = "user-123";
+        var user = new User { Id = userId, Tier = SubscriptionTier.Free };
+        
+        _mockUserRepository
+            .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        var result = await _service.HasFeatureAccessAsync(userId, feature);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeFalse();
     }
 
     #endregion

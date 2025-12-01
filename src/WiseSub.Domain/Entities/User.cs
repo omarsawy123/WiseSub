@@ -14,6 +14,14 @@ public class User
     public DateTime? LastLoginAt { get; set; }
     public string PreferencesJson { get; set; } = string.Empty;
     
+    // Stripe payment fields
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
+    public string? StripePriceId { get; set; }
+    public DateTime? SubscriptionStartDate { get; set; }
+    public DateTime? SubscriptionEndDate { get; set; }
+    public bool IsAnnualBilling { get; set; } = false;
+    
     // Navigation properties
     public ICollection<EmailAccount> EmailAccounts { get; set; } = new List<EmailAccount>();
     public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
