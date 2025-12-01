@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SendGrid;
 using WiseSub.Application.Common.Configuration;
 using WiseSub.Application.Common.Interfaces;
 using WiseSub.Infrastructure.AI;
@@ -62,6 +63,14 @@ public static class DependencyInjection
         services.AddSingleton<IEmailProviderFactory, EmailProviderFactory>();
         services.AddScoped<IEmailIngestionService, EmailIngestionService>();
         // Note: IEmailQueueService removed - using Hangfire for job processing instead
+
+        // Register email notification services (SendGrid)
+        services.Configure<EmailNotificationConfiguration>(
+            configuration.GetSection(EmailNotificationConfiguration.SectionName));
+        
+        var sendGridApiKey = configuration.GetSection("SendGrid:ApiKey").Value ?? "";
+        services.AddSingleton<ISendGridClient>(_ => new SendGridClient(sendGridApiKey));
+        services.AddScoped<IEmailNotificationService, EmailNotificationService>();
 
         // Register AI services
         services.AddSingleton<IOpenAIClient, OpenAIClient>();

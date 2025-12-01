@@ -168,7 +168,7 @@
   - **Property 41: Priority-based processing**
   - **Validates: Requirements 9.3**
 
-- [ ] 10. Implement dashboard service
+- [x] 10. Implement dashboard service
   - Create DashboardService for data aggregation
   - Implement GetDashboardDataAsync (active subscriptions, total spend, categories)
   - Implement category grouping logic
@@ -177,31 +177,31 @@
   - Add upcoming renewal highlighting (within 30 days)
   - _Requirements: 3.1, 3.2, 3.4, 3.5, 5.1, 5.2_
 
-- [ ]* 10.1 Write property test for active subscription display
+- [x]* 10.1 Write property test for active subscription display
   - **Property 12: Active subscription display**
   - **Validates: Requirements 3.1**
 
-- [ ]* 10.2 Write property test for category grouping
+- [x]* 10.2 Write property test for category grouping
   - **Property 13: Category grouping**
   - **Validates: Requirements 3.2**
 
-- [ ]* 10.3 Write property test for upcoming renewal highlighting
+- [x]* 10.3 Write property test for upcoming renewal highlighting
   - **Property 15: Upcoming renewal highlighting**
   - **Validates: Requirements 3.4**
 
-- [ ]* 10.4 Write property test for timeline chronological ordering
+- [x]* 10.4 Write property test for timeline chronological ordering
   - **Property 16: Timeline chronological ordering**
   - **Validates: Requirements 3.5**
 
-- [ ]* 10.5 Write property test for total monthly cost calculation
+- [x]* 10.5 Write property test for total monthly cost calculation
   - **Property 22: Total monthly cost calculation**
   - **Validates: Requirements 5.1**
 
-- [ ]* 10.6 Write property test for category percentage accuracy
+- [x]* 10.6 Write property test for category percentage accuracy
   - **Property 23: Category percentage accuracy**
   - **Validates: Requirements 5.2**
 
-- [ ] 11. Implement alert service
+- [x] 11. Implement alert service
   - Create AlertService for alert generation
   - Implement renewal alert logic (7 days, 3 days before)
   - Implement price change detection and alerts
@@ -210,23 +210,23 @@
   - Create alert preference management
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ]* 11.1 Write property test for 7-day renewal alert generation
+- [x]* 11.1 Write property test for 7-day renewal alert generation
   - **Property 17: 7-day renewal alert generation**
   - **Validates: Requirements 4.1**
 
-- [ ]* 11.2 Write property test for 3-day renewal alert generation
+- [x]* 11.2 Write property test for 3-day renewal alert generation
   - **Property 18: 3-day renewal alert generation**
   - **Validates: Requirements 4.2**
 
-- [ ]* 11.3 Write property test for price increase alert completeness
+- [x]* 11.3 Write property test for price increase alert completeness
   - **Property 19: Price increase alert completeness**
   - **Validates: Requirements 4.3**
 
-- [ ]* 11.4 Write property test for trial ending alert information
+- [x]* 11.4 Write property test for trial ending alert information
   - **Property 20: Trial ending alert information**
   - **Validates: Requirements 4.4**
 
-- [ ]* 11.5 Write property test for unused subscription detection
+- [x]* 11.5 Write property test for unused subscription detection
   - **Property 21: Unused subscription detection**
   - **Validates: Requirements 4.5**
 

@@ -85,4 +85,15 @@
         public static readonly Error ConcurrencyError = new Error("General.ConcurrencyError", "The record was modified by another user.");
         public static readonly Error NotImplemented = new Error("General.NotImplemented", "This feature is not yet implemented.");
     }
+
+    public static class EmailNotificationErrors
+    {
+        public static readonly Error InvalidAlert = new Error("EmailNotification.InvalidAlert", "The alert is invalid or missing required data.");
+        public static readonly Error InvalidMessageId = new Error("EmailNotification.InvalidMessageId", "The message ID is invalid.");
+        public static readonly Error SendFailed = new Error("EmailNotification.SendFailed", "Failed to send the email notification.");
+        public static readonly Error InvalidConfiguration = new Error("EmailNotification.InvalidConfiguration", "The email notification configuration is invalid.");
+        public static readonly Error ConfigurationValidationFailed = new Error("EmailNotification.ConfigurationValidationFailed", "Failed to validate the email configuration.");
+        public static readonly Error RateLimitExceeded = new Error("EmailNotification.RateLimitExceeded", "Email sending rate limit exceeded.");
+        public static readonly Error TemplateNotFound = new Error("EmailNotification.TemplateNotFound", "The email template was not found.");
+    }
 }
