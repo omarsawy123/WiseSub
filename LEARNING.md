@@ -336,4 +336,119 @@ This learning log documents:
 
 ---
 
+### [2025-01-XX] - Task 11: Alert Service Implementation
+
+**What Changed:**
+- Created `IAlertService` interface in `WiseSub.Application/Common/Interfaces/`
+- Implemented `AlertService` in `WiseSub.Application/Services/` (~550 lines)
+- Added DTOs inline in interface file: `CreateAlertRequest`, `AlertGenerationSummary`
+- Registered `IAlertService` in Application DI container
+- Created 38 comprehensive unit tests in `AlertServiceTests.cs`
+
+**Why:**
+- Task 11 required implementing a comprehensive alert system for subscription management
+- Users need proactive notifications for renewals, price changes, trial endings, and unused subscriptions
+- Alert deduplication prevents notification spam
+- Preference-based filtering respects user choices
+
+**Core Alert Types Implemented:**
+
+| Alert Type | Trigger Condition | Warning Period |
+|------------|-------------------|----------------|
+| `RenewalUpcoming7Days` | Active subscription with NextRenewalDate in 4-7 days | 7 days |
+| `RenewalUpcoming3Days` | Active subscription with NextRenewalDate in 0-3 days | 3 days |
+| `PriceIncrease` | Price change in history (last 7 days) where new > old | Immediate |
+| `TrialEnding` | Subscription with TrialActive status, ending in 0-3 days | 3 days |
+| `UnusedSubscription` | No LastActivityEmailAt for 6+ months | After 6 months |
+
+**Patterns & Best Practices:**
+
+1. **Preference-Based Filtering**: Each alert type checks user preferences before generating
+   ```csharp
+   var preferences = GetPreferences(user);
+   if (!preferences.EnableRenewalAlerts)
+       return Result.Success<IEnumerable<Alert>>(Enumerable.Empty<Alert>());
+   ```
+
+2. **Alert Deduplication**: Checks for existing pending alerts before creating new ones
+   ```csharp
+   var existingAlert = await _alertRepository.GetBySubscriptionAndTypeAsync(
+       subscription.Id, alertType, cancellationToken);
+   if (existingAlert != null && existingAlert.Status == AlertStatus.Pending)
+       return null;  // Skip duplicate
+   ```
+
+3. **Retry Logic with Max Attempts**: Failed alerts can be retried up to 3 times
+   ```csharp
+   alert.RetryCount++;
+   if (alert.RetryCount >= MaxRetryCount)
+       await _alertRepository.MarkAsFailedAsync(alertId, cancellationToken);
+   else
+       await _alertRepository.UpdateAsync(alert, cancellationToken);
+   ```
+
+4. **Status-Based Repository Queries**: Uses `GetByUserIdAndStatusAsync` for efficient filtering
+   ```csharp
+   var activeSubscriptions = await _subscriptionRepository.GetByUserIdAndStatusAsync(
+       userId, SubscriptionStatus.Active, cancellationToken);
+   ```
+
+5. **Price Normalization for Savings Calculation**: Monthly equivalent for wasted amount calculation
+   ```csharp
+   private static decimal NormalizeToMonthly(decimal price, BillingCycle cycle) => cycle switch
+   {
+       BillingCycle.Annual => price / 12,
+       BillingCycle.Quarterly => price / 3,
+       BillingCycle.Weekly => price * 4.33m,
+       _ => price
+   };
+   ```
+
+**Service Methods:**
+
+| Method | Purpose |
+|--------|---------|
+| `GenerateRenewalAlertsAsync` | Creates 7-day and 3-day renewal warnings |
+| `GeneratePriceChangeAlertsAsync` | Detects price increases from subscription history |
+| `GenerateTrialEndingAlertsAsync` | Warns about trials ending in 3 days |
+| `GenerateUnusedSubscriptionAlertsAsync` | Identifies subscriptions inactive for 6+ months |
+| `GenerateAllAlertsAsync` | Aggregate method returning summary counts |
+| `GetUserAlertsAsync` | Retrieves alerts with optional status/type filtering |
+| `GetPendingAlertsAsync` | Gets alerts due for sending |
+| `MarkAlertAsSentAsync` | Updates status after successful delivery |
+| `MarkAlertAsFailedAsync` | Handles retry logic and max attempt tracking |
+| `SnoozeAlertAsync` | Delays alert by specified hours |
+| `DismissAlertAsync` | Removes alert permanently |
+| `GetUserPreferencesAsync` | Retrieves user's alert settings |
+| `UpdateUserPreferencesAsync` | Updates alert preferences |
+| `CreateAlertAsync` | Manual alert creation with validation |
+
+**Trade-offs:**
+| Decision | Rationale |
+|----------|-----------|
+| DTOs in interface file | Keeps related types together; simple for small DTOs |
+| Inline preferences parsing | Avoids extra repository call; user already loaded |
+| Status-based queries | More efficient than loading all subscriptions then filtering |
+| 6-month unused threshold | Balances useful detection vs false positives for seasonal services |
+
+**Key Takeaways:**
+1. **Use status-specific repository methods**: `GetByUserIdAndStatusAsync` is more efficient than filtering in memory
+2. **History-based detection**: Price changes are detected from `SubscriptionHistory` entries, not by comparing to previous state
+3. **Test the right repository method**: Mocks must match actual service calls (e.g., `GetByUserIdAndStatusAsync` not `GetByUserIdAsync`)
+4. **Handle null LastActivityEmailAt**: Falls back to `CreatedAt` for unused subscription calculation
+5. **Alert messages should be user-friendly**: Include service name, amounts, and actionable suggestions
+
+**Files Created:**
+- `src/WiseSub.Application/Common/Interfaces/IAlertService.cs` (interface + DTOs)
+- `src/WiseSub.Application/Services/AlertService.cs` (~550 lines)
+- `tests/WiseSub.Application.Tests/Services/AlertServiceTests.cs` (38 tests)
+
+**Files Modified:**
+- `src/WiseSub.Application/DependencyInjection.cs` (registered AlertService)
+
+**Test Coverage:**
+- 38 new tests covering all alert generation methods, preference checking, deduplication, retry logic, snooze/dismiss functionality, and CRUD operations
+
+---
+
 *Add new entries above this line*

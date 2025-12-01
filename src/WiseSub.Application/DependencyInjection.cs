@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailMetadataService, EmailMetadataService>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IAlertService, AlertService>();
 
         return services;
     }
