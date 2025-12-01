@@ -11,6 +11,7 @@
 3. **`docs/AUTHENTICATION.md`** - Authentication flow and security configuration
 4. **`docs/DATABASE_IMPLEMENTATION.md`** - Database schema and implementation details
 5. **`docs/AI_EXTRACTION_SERVICE.md`** - AI/OpenAI integration for email extraction
+6. **`docs/BUSINESS_FLOWS.md`** - All business flow diagrams and sequences
 
 ## 🏗️ Architecture Rules
 
@@ -310,6 +311,49 @@ Located in `WiseSub.Infrastructure/AI/`:
 - Adding background email processing service
 
 Keep entries chronological and concise but informative. The goal is to build institutional knowledge for the project.
+
+### BUSINESS_FLOWS.md - Flow Documentation
+
+**CRITICAL**: When adding or modifying any business flow, you MUST update `docs/BUSINESS_FLOWS.md`.
+
+**Path**: `docs/BUSINESS_FLOWS.md`
+
+**When to Update:**
+- Adding a new API endpoint that introduces a new flow
+- Modifying an existing flow (adding steps, changing sequence)
+- Adding new background services or workers
+- Changing how components interact
+- Adding new external service integrations
+
+**What to Include:**
+1. **Overview** - Brief description of the flow's purpose
+2. **Components** - List of services, repositories, and controllers involved
+3. **Endpoints** - Table of API endpoints (if applicable)
+4. **Flow Diagram** - ASCII art diagram showing the sequence
+
+**ASCII Diagram Standards:**
+- Use box-drawing characters: `┌ ┐ └ ┘ │ ─ ├ ┤ ┬ ┴ ┼`
+- Arrow characters: `→ ← ↑ ↓ ▶ ◀ ▲ ▼` or `─>` `<─`
+- Maximum width: 77 characters
+- Include actors (Frontend, Backend, External APIs)
+
+**Update Checklist:**
+- [ ] Update "Last Updated" date at top of document
+- [ ] Add/modify flow diagram
+- [ ] Update component list
+- [ ] Update endpoint table
+- [ ] Add entry to Version History table at bottom
+
+**Existing Flows (9 total):**
+1. Authentication Flow
+2. Email Account Connection Flow
+3. Email Scanning Flow
+4. AI Extraction Flow
+5. Subscription Management Flow
+6. Alert Generation Flow
+7. Email Notification Flow
+8. Dashboard & Insights Flow
+9. User Data Management Flow (GDPR)
 
 ## 🚫 What NOT to Do
 

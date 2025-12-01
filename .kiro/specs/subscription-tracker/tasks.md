@@ -230,7 +230,7 @@
   - **Property 21: Unused subscription detection**
   - **Validates: Requirements 4.5**
 
-- [ ] 12. Implement email notification service with SendGrid
+- [x] 12. Implement email notification service with SendGrid
   - Create IEmailNotificationService interface
   - Integrate SendGrid API
   - Create email templates for alerts (renewal, price change, trial ending, unused)
@@ -239,7 +239,10 @@
   - Track delivery status
   - _Requirements: 4.1, 4.2, 4.3, 4.4, FR-4_
 
-- [ ] 13. Implement vendor metadata service
+- [x] 13. Implement vendor metadata service
+
+
+
   - Create VendorMetadataService
   - Implement vendor matching logic (normalized name comparison)
   - Add vendor enrichment background job
@@ -247,11 +250,17 @@
   - Create fallback logic for unknown vendors
   - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
 
-- [ ]* 13.1 Write property test for vendor metadata matching
+- [x] 13.1 Write property test for vendor metadata matching
+
+
+
   - **Property 44: Vendor metadata matching**
   - **Validates: Requirements 10.1**
 
-- [ ]* 13.2 Write property test for fallback to service name
+
+
+- [ ] 13.2 Write property test for fallback to service name
+
   - **Property 46: Fallback to service name**
   - **Validates: Requirements 10.3**
 
@@ -263,15 +272,18 @@
   - Implement upgrade prompts when limits reached
   - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [ ]* 14.1 Write property test for free tier limit enforcement
+- [ ] 14.1 Write property test for free tier limit enforcement
+
   - **Property 57: Free tier limit enforcement**
   - **Validates: Requirements 14.2**
 
-- [ ]* 14.2 Write property test for paid tier feature unlock
+- [ ] 14.2 Write property test for paid tier feature unlock
+
   - **Property 58: Paid tier feature unlock**
   - **Validates: Requirements 14.3**
 
-- [ ]* 14.3 Write property test for downgrade data preservation
+- [ ] 14.3 Write property test for downgrade data preservation
+
   - **Property 59: Downgrade data preservation**
   - **Validates: Requirements 14.4**
 
