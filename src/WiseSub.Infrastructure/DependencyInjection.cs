@@ -22,13 +22,13 @@ public static class DependencyInjection
         services.Configure<EmailScanConfiguration>(
             configuration.GetSection(EmailScanConfiguration.SectionName));
 
-        // Configure Entity Framework Core with SQLite
+        // Configure Entity Framework Core with SQL Server
         var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Data Source=subscriptiontracker.db";
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
         
         services.AddDbContext<WiseSubDbContext>(options =>
         {
-            options.UseSqlite(connectionString);
+            options.UseSqlServer(connectionString);
             // Enable sensitive data logging in development
             if (configuration.GetValue<bool>("Logging:EnableSensitiveDataLogging"))
             {

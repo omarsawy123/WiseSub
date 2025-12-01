@@ -11,7 +11,8 @@ namespace WiseSub.Infrastructure.Tests.Repositories;
 
 /// <summary>
 /// Integration tests for repository implementations
-/// Uses SQLite in-memory database which supports ExecuteUpdateAsync
+/// Uses SQLite in-memory database which supports ExecuteUpdateAsync (unlike EF Core InMemory)
+/// Note: Production uses SQL Server, but SQLite is used for testing ExecuteUpdateAsync operations
 /// </summary>
 public class RepositoryIntegrationTests : IDisposable
 {
