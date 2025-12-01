@@ -19,6 +19,7 @@ This document describes all business flows in the WiseSub application. Each flow
 8. [Dashboard & Insights Flow](#8-dashboard--insights-flow)
 9. [User Data Management Flow (GDPR)](#9-user-data-management-flow-gdpr)
 10. [Vendor Metadata Flow](#10-vendor-metadata-flow)
+11. [Subscription Tier Management Flow](#11-subscription-tier-management-flow)
 
 ---
 
@@ -1166,6 +1167,184 @@ NAME NORMALIZATION:
 
 ---
 
+## 11. Subscription Tier Management Flow
+
+### Overview
+Manages user subscription tiers (Free/Paid), enforces limits, controls feature access, and handles upgrades/downgrades while preserving user data.
+
+### Components
+- `TierService` - Business logic for tier management
+- `UserRepository` - User data access
+- `EmailAccountRepository` - Email account counting
+- `SubscriptionRepository` - Subscription counting
+
+### Tier Limits
+| Tier | Email Accounts | Subscriptions | Features |
+|------|----------------|---------------|----------|
+| Free | 1 | 5 | Basic dashboard |
+| Paid | Unlimited | Unlimited | All features (PDF export, Cancellation Assistant) |
+
+### Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SUBSCRIPTION TIER MANAGEMENT FLOW                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                         OPERATION VALIDATION
+═══════════════════════════════════════════════════════════════════════════════
+
+  Any Service                    TierService                    Database
+       │                              │                            │
+       │  1. ValidateOperationAsync   │                            │
+       │     (userId, AddSubscription)│                            │
+       │─────────────────────────────>│                            │
+       │                              │                            │
+       │                              │  2. Get user tier          │
+       │                              │─────────────────────────────>│
+       │                              │<─────────────────────────────│
+       │                              │                            │
+       │                              │  3. Get current counts     │
+       │                              │─────────────────────────────>│
+       │                              │<─────────────────────────────│
+       │                              │                            │
+       │                              │  4. Check against limits   │
+       │                              │                            │
+       │              ┌───────────────┴───────────────┐            │
+       │              │                               │            │
+       │         UNDER LIMIT                     AT LIMIT          │
+       │              │                               │            │
+       │              ▼                               ▼            │
+       │     ┌─────────────┐              ┌─────────────────┐     │
+       │     │ Return      │              │ Return Failure  │     │
+       │     │ Success     │              │ TierLimitExceeded│     │
+       │     └─────────────┘              └─────────────────┘     │
+       │                                          │               │
+       │                                          ▼               │
+       │                              ┌─────────────────────┐     │
+       │                              │ Show upgrade prompt │     │
+       │                              │ to user             │     │
+       │                              └─────────────────────┘     │
+       │                                                          │
+       │<─────────────────────────────────────────────────────────│
+       │                                                          │
+       ▼                                                          ▼
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         FREE TIER LIMITS                                     │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Max Email Accounts: 1                                              │   │
+│  │  Max Subscriptions: 5                                               │   │
+│  │  Cancellation Assistant: ❌ Not Available                           │   │
+│  │  PDF Export: ❌ Not Available                                       │   │
+│  │  Advanced Insights: ❌ Not Available                                │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PAID TIER FEATURES                                   │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Max Email Accounts: Unlimited                                      │   │
+│  │  Max Subscriptions: Unlimited                                       │   │
+│  │  Cancellation Assistant: ✅ Available                               │   │
+│  │  PDF Export: ✅ Available                                           │   │
+│  │  Advanced Insights: ✅ Available                                    │   │
+│  │  Unlimited History: ✅ Available                                    │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+                              UPGRADE FLOW
+═══════════════════════════════════════════════════════════════════════════════
+
+  Frontend                   TierService                    Database
+       │                          │                            │
+       │  1. UpgradeToPaydAsync   │                            │
+       │     (userId)             │                            │
+       │─────────────────────────>│                            │
+       │                          │                            │
+       │                          │  2. Get user               │
+       │                          │─────────────────────────────>│
+       │                          │<─────────────────────────────│
+       │                          │                            │
+       │                          │  3. Check current tier     │
+       │                          │                            │
+       │                          │  4. If Free → Update to Paid│
+       │                          │─────────────────────────────>│
+       │                          │<─────────────────────────────│
+       │                          │                            │
+       │  5. Success              │                            │
+       │     (All features now    │                            │
+       │      accessible)         │                            │
+       │<─────────────────────────│                            │
+       │                          │                            │
+       ▼                          ▼                            ▼
+
+═══════════════════════════════════════════════════════════════════════════════
+                         DOWNGRADE FLOW (Data Preserved)
+═══════════════════════════════════════════════════════════════════════════════
+
+  Frontend                   TierService                    Database
+       │                          │                            │
+       │  1. DowngradeToFreeAsync │                            │
+       │     (userId)             │                            │
+       │─────────────────────────>│                            │
+       │                          │                            │
+       │                          │  2. Get user               │
+       │                          │─────────────────────────────>│
+       │                          │<─────────────────────────────│
+       │                          │                            │
+       │                          │  3. Update tier to Free    │
+       │                          │     (NO data deletion!)    │
+       │                          │─────────────────────────────>│
+       │                          │<─────────────────────────────│
+       │                          │                            │
+       │  4. Success              │                            │
+       │     (Data preserved,     │                            │
+       │      features restricted)│                            │
+       │<─────────────────────────│                            │
+       │                          │                            │
+       ▼                          ▼                            ▼
+
+DATA PRESERVATION ON DOWNGRADE:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  ✅ All email accounts preserved (but can't add new ones)                   │
+│  ✅ All subscriptions preserved (but can't add new ones)                    │
+│  ✅ All alerts preserved                                                     │
+│  ✅ All history preserved                                                    │
+│  ❌ Premium features disabled (PDF export, Cancellation Assistant)          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+USAGE TRACKING:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  GetUsageAsync(userId) returns:                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  {                                                                   │   │
+│  │    "currentTier": "Free",                                           │   │
+│  │    "emailAccountCount": 1,                                          │   │
+│  │    "subscriptionCount": 3,                                          │   │
+│  │    "limits": {                                                       │   │
+│  │      "maxEmailAccounts": 1,                                         │   │
+│  │      "maxSubscriptions": 5                                          │   │
+│  │    },                                                                │   │
+│  │    "isAtEmailLimit": true,                                          │   │
+│  │    "isAtSubscriptionLimit": false                                   │   │
+│  │  }                                                                   │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Flow Maintenance Guidelines
 
 > **For AI Agents**: Follow these rules when modifying this document.
@@ -1201,3 +1380,4 @@ NAME NORMALIZATION:
 |------|--------|---------|
 | 2025-12-01 | Kiro | Initial creation with 9 business flows |
 | 2025-12-01 | Kiro | Added Vendor Metadata Flow (Task 13) |
+| 2025-12-01 | Kiro | Added Subscription Tier Management Flow (Task 14) |

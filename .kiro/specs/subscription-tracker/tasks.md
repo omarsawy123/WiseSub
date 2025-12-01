@@ -265,6 +265,7 @@
 
 - [x] 14. Implement subscription tier management
 
+
   - Add tier validation in SubscriptionService
 
   - Implement free tier limits (1 email account, 5 subscriptions)

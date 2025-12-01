@@ -31,7 +31,7 @@ When updating the flow documentation:
 
 ## Existing Flows
 
-The document currently contains 10 business flows:
+The document currently contains 11 business flows:
 
 1. **Authentication Flow** - Google OAuth, JWT tokens, login/logout
 2. **Email Account Connection Flow** - Gmail OAuth, token storage
@@ -43,6 +43,7 @@ The document currently contains 10 business flows:
 8. **Dashboard & Insights Flow** - Spending analytics
 9. **User Data Management Flow** - GDPR export/deletion
 10. **Vendor Metadata Flow** - Vendor matching, enrichment, caching
+11. **Subscription Tier Management Flow** - Free/Paid tiers, limits, upgrades
 
 ## ASCII Diagram Format
 
