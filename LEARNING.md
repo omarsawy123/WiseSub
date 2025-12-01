@@ -249,4 +249,91 @@ This learning log documents:
 
 ---
 
+### [2025-12-01] - Database Migration: SQLite to SQL Server
+
+**What Changed:**
+- Replaced SQLite database provider with SQL Server in production
+- Updated NuGet packages:
+  - Removed: `Microsoft.EntityFrameworkCore.Sqlite` from Infrastructure project
+  - Added: `Microsoft.EntityFrameworkCore.SqlServer` to Infrastructure project
+  - Added: `Microsoft.EntityFrameworkCore.Sqlite` to Test project (for integration tests only)
+- Updated connection strings in `appsettings.json`:
+  ```json
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=WiseSub;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"
+  }
+  ```
+- Modified `DependencyInjection.cs`: Changed `UseSqlite()` to `UseSqlServer()`
+- Modified `WiseSubDbContextFactory.cs`: Changed design-time factory to use SQL Server
+- Deleted old SQLite migrations and created fresh SQL Server migration
+- Kept SQLite in test project for repository integration tests (required for `ExecuteUpdateAsync` support)
+
+**Why:**
+- SQL Server provides enterprise-grade features needed for production:
+  - Better concurrent access and locking
+  - Full-text search capabilities
+  - Advanced query optimization
+  - Integration with Azure SQL for cloud deployment
+- LocalDB provides zero-configuration development experience on Windows
+- SQLite was fine for prototyping but lacks features needed at scale
+
+**Patterns & Best Practices:**
+
+1. **Separate Test Database Provider**: Tests use SQLite in-memory while production uses SQL Server
+   ```csharp
+   // Test setup (RepositoryIntegrationTests.cs)
+   var options = new DbContextOptionsBuilder<WiseSubDbContext>()
+       .UseSqlite(_connection)  // SQLite for tests
+       .Options;
+   
+   // Production (DependencyInjection.cs)
+   options.UseSqlServer(connectionString);  // SQL Server for production
+   ```
+
+2. **Connection String Validation**: Production code now throws if connection string is missing
+   ```csharp
+   var connectionString = configuration.GetConnectionString("DefaultConnection")
+       ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+   ```
+
+3. **Migration Strategy**: 
+   - Deleted all SQLite migrations
+   - Created fresh `InitialCreate` migration for SQL Server
+   - EF Core handled migration folder location automatically (`Migrations/` instead of `Data/Migrations/`)
+
+**Connection String Formats:**
+| Environment | Connection String |
+|-------------|-------------------|
+| Development (LocalDB) | `Server=(localdb)\\MSSQLLocalDB;Database=WiseSub;Trusted_Connection=True;...` |
+| Development (Docker) | `Server=localhost,1433;Database=WiseSub;User Id=sa;Password=...;...` |
+| Production (Azure) | `Server=tcp:xxx.database.windows.net,1433;Database=WiseSub;...` |
+
+**Trade-offs:**
+| Aspect | SQLite | SQL Server | Decision |
+|--------|--------|------------|----------|
+| Setup complexity | Zero | Requires LocalDB/instance | SQL Server for prod |
+| Concurrent access | Limited | Excellent | SQL Server |
+| Cloud deployment | Manual | Azure SQL native | SQL Server |
+| Test speed | Fastest | Fast (LocalDB) | SQLite for tests |
+| ExecuteUpdateAsync | ✅ Supported | ✅ Supported | Both work |
+| InMemory provider | ❌ No ExecuteUpdateAsync | ❌ No ExecuteUpdateAsync | Use SQLite for tests |
+
+**Key Takeaways:**
+1. **Test database can differ from production**: It's acceptable to use SQLite for tests when SQL Server is used in production, as long as EF Core abstracts the differences
+2. **ExecuteUpdateAsync requires real database**: EF Core InMemory provider doesn't support `ExecuteUpdateAsync`, so tests must use SQLite or SQL Server
+3. **Migration cleanup**: When switching providers, delete all migrations and create fresh ones to avoid provider-specific SQL issues
+4. **Connection string security**: Use `TrustServerCertificate=True` for development; use proper certificates in production
+5. **LocalDB convenience**: SQL Server LocalDB provides full SQL Server features without installation overhead for Windows development
+
+**Files Modified:**
+- `src/WiseSub.Infrastructure/WiseSub.Infrastructure.csproj` - Swapped SQLite → SqlServer
+- `src/WiseSub.Infrastructure/DependencyInjection.cs` - UseSqlServer()
+- `src/WiseSub.Infrastructure/Data/WiseSubDbContextFactory.cs` - UseSqlServer()
+- `src/WiseSub.API/appsettings.json` - SQL Server connection string
+- `tests/WiseSub.Infrastructure.Tests/WiseSub.Infrastructure.Tests.csproj` - Added SQLite for tests
+- `tests/WiseSub.Infrastructure.Tests/Repositories/RepositoryIntegrationTests.cs` - Updated comments
+- `src/WiseSub.Infrastructure/Migrations/*` - New SQL Server migration
+
+---
+
 *Add new entries above this line*
